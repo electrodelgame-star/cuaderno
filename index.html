@@ -349,8 +349,8 @@ function render(){
   $('#title').textContent=TABS.find(t=>t[0]===tab)[1].replace('Partic.','Particulares');
   const l=visible();
   $('#list').innerHTML=l.length?l.map(card).join(''):`<div class="empty">${query?'Nada encontrado para “'+esc(query)+'”':tab==='archivo'?'No hay partes archivados':'No hay partes aquí.<br>Pulsa + para añadir uno.'}</div>`;
-  const pend=jobs.filter(j=>!j.archivado&&!(j.checks||{}).cita).length;
-  $('#tabs').innerHTML=TABS.map(([k,n,ic])=>`<button data-tab="${k}" class="${k===tab?'on':''}"><span class="ic">${ic}</span>${n}${k==='pendiente'&&pend?`<span class="badge">${pend}</span>`:''}</button>`).join('');
+  const cnt=k=>jobs.filter(j=>k==='archivo'?j.archivado:!j.archivado&&(k==='notas'||(k==='pendiente'?!(j.checks||{}).cita:j.compania===k))).length;
+  $('#tabs').innerHTML=TABS.map(([k,n,ic])=>{const c=cnt(k);return `<button data-tab="${k}" class="${k===tab?'on':''}"><span class="ic">${ic}</span>${n}${c?`<span class="badge">${c}</span>`:''}</button>`}).join('');
   renderSync();
 }
 function card(j){
