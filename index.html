@@ -191,6 +191,7 @@ nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line)
 <script>
 'use strict';
 const KEY='cuaderno.v1', CFG='cuaderno.cfg', CODES='cuaderno.codigos', DEAD='cuaderno.borrados';
+const BK='cuaderno.backup.', RESC=KEY+'.rescate-', BK_DAYS=7, RESC_MAX=6; /* arriba del todo: load() los usa al arrancar */
 const ICON={
  phone:'<svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
  pin:'<svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
@@ -236,22 +237,71 @@ function load(){
   const raw=localStorage.getItem(KEY); let d;
   try{ d=JSON.parse(raw) }catch(e){ d=null }
   if(Array.isArray(d)){
-    /* migraciones: un fallo aquí nunca debe vaciar la lista */
-    d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); }catch(e){} });
-    return d;
+    return migrate(d);
   }
   /* datos ilegibles: se guarda una copia de rescate antes de que nada los sobrescriba */
-  if(raw){ try{ localStorage.setItem(KEY+'.rescate-'+Date.now(),raw) }catch(e){} }
+  if(raw){ try{ guardaRescate(raw) }catch(e){ try{ localStorage.setItem(KEY+'.rescate-'+Date.now(),raw) }catch(e2){} } }
   return [];
+}
+/* migraciones: un fallo aquí nunca debe vaciar la lista */
+function migrate(d){
+  d=d.filter(j=>j&&typeof j==='object');
+  d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); if(!Array.isArray(j.fotos)) j.fotos=[]; }catch(e){} });
+  return d;
+}
+/* ---- v14 · red de seguridad ----
+   · save() nunca sustituye una lista guardada por otra vacía o mucho más corta sin guardar antes una copia de rescate
+     (cuaderno.v1.rescate-<ms>, se conservan las 6 últimas).
+   · copia diaria cuaderno.backup.AAAA-MM-DD = {t,partes(sin fotos),codigos,borrados}: se escribe al abrir la app cada día
+     y se refresca en cada guardado de ese día, salvo que la lista nueva esté vacía o sea mucho más corta. Se guardan las 7 más nuevas.
+   · Copia de seguridad → Copias de seguridad: lista diarias y rescates con «Restaurar» (pide confirmación y guarda antes lo actual). */
+function sinFotos(l){return (Array.isArray(l)?l:[]).filter(j=>j&&typeof j==='object').map(j=>{const {fotos,...r}=j;return r})}
+function hoyKey(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function listaDe(d){return Array.isArray(d)?d:(d&&Array.isArray(d.partes)?d.partes:null)}
+function cuenta(raw){try{const l=listaDe(JSON.parse(raw));return l?l.length:-1}catch(e){return -1}}
+function encoge(n,m){return n>0&&(m===0||(n-m>=3&&m<n*0.6))}
+function lsKeys(p){const o=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(p))o.push(k)}return o.sort()}
+function diarias(){return lsKeys(BK).filter(k=>/^\d{4}-\d{2}-\d{2}$/.test(k.slice(BK.length)))}
+function podaRescates(){const l=lsKeys(RESC);while(l.length>RESC_MAX)localStorage.removeItem(l.shift())}
+function podaCopias(){const l=diarias();while(l.length>BK_DAYS)localStorage.removeItem(l.shift())}
+/* si no cabe, se borra la copia diaria más antigua (siempre queda al menos una) y se reintenta */
+function setConEspacio(k,v){
+  for(let i=0;i<8;i++){ try{localStorage.setItem(k,v);return true}catch(e){ const l=diarias().filter(x=>x!==k); if(l.length<2) break; localStorage.removeItem(l[0]); } }
+  try{localStorage.setItem(k,v);return true}catch(e){return false}
+}
+function guardaRescate(raw){
+  const k=RESC+Date.now();
+  if(setConEspacio(k,raw)){podaRescates();return true}
+  try{const d=JSON.parse(raw), l=listaDe(d); if(l){ const v=Array.isArray(d)?sinFotos(d):{...d,partes:sinFotos(l)}; if(setConEspacio(k,JSON.stringify(v))){podaRescates();return true} }}catch(e){}
+  return false;
+}
+function copiaDiaria(){
+  try{
+    const m=jobs.length; if(!m) return false;
+    const k=BK+hoyKey(), prev=localStorage.getItem(k);
+    if(prev&&encoge(cuenta(prev),m)) return false;
+    let c={},b={}; try{c=cat||{}}catch(e){} try{b=dead||{}}catch(e){}
+    const ok=setConEspacio(k,JSON.stringify({t:Date.now(),partes:sinFotos(jobs),codigos:c,borrados:b}));
+    podaCopias(); return ok;
+  }catch(e){return false}
 }
 async function firstRun(){
   if(localStorage.getItem(KEY)) return;
   try{const r=await fetch('seed.json',{cache:'no-store'}); if(r.ok){const d=await r.json(); merge(Array.isArray(d)?d:d.partes||[],false);}}catch(e){}
   save(); render();
 }
-function save(){
-  try{localStorage.setItem(KEY,JSON.stringify(jobs));return true}
+function save(opts){
+  const force=!!(opts&&opts.force);
+  try{
+    const prev=localStorage.getItem(KEY);
+    if(prev&&!force){ const n=cuenta(prev);
+      if(n<0||encoge(n,jobs.length)){
+        if(!guardaRescate(prev)){ toast('No se guardó: la lista nueva es mucho más corta y no cabe una copia de lo anterior'); return false; }
+      } }
+  }catch(e){}
+  try{localStorage.setItem(KEY,JSON.stringify(jobs))}
   catch(e){toast('Memoria llena: exporta una copia y borra fotos antiguas');return false}
+  copiaDiaria(); return true;
 }
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -638,17 +688,46 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mExp">⬇️&nbsp; Exportar todo (archivo .json)</button>
   <button class="btn soft" id="mImp">⬆️&nbsp; Importar copia (.json)</button>
   <button class="btn soft" id="mSync">🔄&nbsp; Leer partes nuevos ahora</button>
+  <button class="btn soft" id="mBk">🛟&nbsp; Copias de seguridad (${diarias().length+lsKeys(RESC).length})</button>
   <button class="btn soft" id="mDead">🗑️&nbsp; Borrados (${Object.keys(dead).length})</button>
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
   <p class="hint">${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
-  $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados;
+  $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
   $('#mSync').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));sync(true)};
   $('#mOk').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));closeSheet();if(cfg.url)sync()};
 };
+function openCopias(){
+  const fd=t=>new Date(t).toLocaleString('es-ES',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const items=[...diarias().reverse().map(k=>{const raw=localStorage.getItem(k);let t=0;try{t=JSON.parse(raw).t||0}catch(e){}
+      const [y,mo,d]=k.slice(BK.length).split('-').map(Number);
+      return {k,tit:new Date(y,mo-1,d).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}).replace(/^./,c=>c.toUpperCase()),sub:(t?'guardada '+new Date(t).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})+' · ':'')+'copia diaria',n:cuenta(raw),kb:Math.round((raw||'').length/1024)}}),
+    ...lsKeys(RESC).reverse().map(k=>{const raw=localStorage.getItem(k);return {k,tit:'Rescate · '+fd(+k.slice(RESC.length)),sub:'copia automática antes de un cambio grande',n:cuenta(raw),kb:Math.round((raw||'').length/1024)}})];
+  openSheet(`<h2>Copias de seguridad</h2>
+  <p class="hint" style="margin-top:-6px">El móvil guarda solo una copia por día (los últimos 7 días) y otra antes de cualquier cambio grande. Las fotos no van en estas copias, pero al restaurar se conservan las que tengas ahora. Ahora tienes ${jobs.length} partes.</p>
+  <div id="bkList">${items.length?items.map(x=>`<div class="cat" data-k="${esc(x.k)}"><div class="ch"><b>${esc(x.tit)}</b><span>${x.n<0?'ilegible':x.n+(x.n===1?' parte':' partes')}</span></div>
+    <div style="display:flex;gap:8px;align-items:center"><span style="flex:1;font-size:14px;color:var(--brown-2)">${esc(x.sub)} · ${x.kb} KB</span>${x.n>=0?'<button type="button" class="btn primary" data-res="1" style="min-width:120px">Restaurar</button>':''}</div></div>`).join(''):'<p class="hint">Todavía no hay copias. Se crea una al abrir la app cada día.</p>'}</div>
+  <div class="actions sticky"><button class="btn soft" id="bkOk">Cerrar</button></div>`);
+  $('#bkOk').onclick=closeSheet;
+  $('#bkList').onclick=ev=>{const b=ev.target.closest('[data-res]'); if(!b) return; restaurar(b.closest('.cat').dataset.k)};
+}
+function restaurar(k){
+  let d=null; try{d=JSON.parse(localStorage.getItem(k))}catch(e){}
+  const list=listaDe(d); if(!list){toast('Esa copia no se puede leer');return false}
+  if(!confirm(`¿Restaurar esta copia (${list.length} partes)?\n\nLos ${jobs.length} partes que tienes ahora se guardan antes como copia de rescate, por si acaso.`)) return false;
+  let snap=false; try{snap=guardaRescate(JSON.stringify({t:Date.now(),motivo:'antes de restaurar',partes:jobs,codigos:cat,borrados:dead}))}catch(e){}
+  if(!snap&&!confirm('No hay espacio para guardar antes lo actual. ¿Restaurar igualmente?')) return false;
+  const fotosDe=new Map(); for(const j of jobs) if(j.fotos&&j.fotos.length){fotosDe.set('id:'+j.id,j.fotos); if(normNum(j.numero)) fotosDe.set(normNum(j.numero),j.fotos)}
+  jobs=migrate(JSON.parse(JSON.stringify(list))).map(j=>({...j,fotos:Array.isArray(j.fotos)&&j.fotos.length?j.fotos:(fotosDe.get('id:'+j.id)||fotosDe.get(normNum(j.numero))||[])}));
+  if(!Array.isArray(d)){
+    if(d.codigos&&typeof d.codigos==='object'&&!Array.isArray(d.codigos)){cat=d.codigos;saveCat()}
+    if(d.borrados&&typeof d.borrados==='object'&&!Array.isArray(d.borrados)){dead=d.borrados;saveDead()}
+  }
+  save({force:true}); closeSheet(); render(); toast('Copia restaurada: '+jobs.length+' partes'); return true;
+}
 function openBorrados(){
   const l=Object.entries(dead).sort((a,b)=>(b[1].t||0)-(a[1].t||0));
   openSheet(`<h2>Borrados</h2>
@@ -760,11 +839,12 @@ function importFromHash(){
 }
 addEventListener('hashchange',importFromHash);
 if(!cat){cat={};catFromJobs(jobs,true);saveCat()}
+copiaDiaria();
 render();
 importFromHash();
 firstRun().then(()=>sync());
 setInterval(()=>{render()},60000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){sync();render()}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){copiaDiaria();sync();render()}});
 </script>
 </body>
 </html>
