@@ -93,6 +93,20 @@ main{padding:12px 10px 170px}
 .imp .isub{font-weight:800;font-size:15px;white-space:nowrap;text-align:right;min-width:78px;opacity:1;margin:0;align-self:end;padding-bottom:12px}
 .imp .del{width:44px;height:44px;border-radius:10px;background:#F3DADA;color:#8E1B1B;display:grid;place-items:center;align-self:end}
 .imp .del svg{width:18px;height:18px}
+.imp{position:relative}
+.sug{position:absolute;left:6px;right:6px;top:72px;z-index:5;background:var(--white);border:1.5px solid var(--teal);border-radius:11px;box-shadow:0 8px 18px rgba(40,25,15,.18);overflow:hidden}
+.sug button{display:flex;width:100%;gap:8px;align-items:baseline;text-align:left;padding:12px;min-height:46px;border-bottom:1px solid #EFE7DC;font-size:15px}
+.sug button:last-child{border-bottom:0}
+.sug button:active{background:#E2F0EC}
+.sug b{flex:none}.sug .sd{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--brown-2)}.sug .sp{flex:none;font-weight:700;color:var(--teal-2)}
+.cat{border:1.5px solid #E0D6CA;border-radius:12px;background:#FBF7F1;padding:8px;margin-bottom:8px}
+.cat .ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:15px}
+.cat .ch span{font-size:12px;color:var(--muted)}
+.cat .cr{display:grid;grid-template-columns:1fr 104px 44px;gap:6px}
+.cat input{width:100%;border:1.5px solid #E0D6CA;border-radius:9px;padding:10px;font-size:16px;background:var(--white);color:var(--brown);font-family:inherit;min-height:44px}
+.cat input[data-k=precio]{text-align:right}
+.cat .del{width:44px;height:44px;border-radius:10px;background:#F3DADA;color:#8E1B1B;display:grid;place-items:center}
+.cat .del svg{width:18px;height:18px}
 .addimp{width:100%;margin-top:8px;border:1.5px dashed #BFB2A4;border-radius:11px;min-height:46px;font-weight:700;color:var(--teal-2);background:transparent}
 .imptot{margin-top:10px;border-top:1.5px solid #E0D6CA;padding-top:8px;font-size:15px}
 .imptot div{display:flex;justify-content:space-between;padding:3px 2px}
@@ -171,7 +185,7 @@ nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line)
 
 <script>
 'use strict';
-const KEY='cuaderno.v1', CFG='cuaderno.cfg';
+const KEY='cuaderno.v1', CFG='cuaderno.cfg', CODES='cuaderno.codigos';
 const ICON={
  phone:'<svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
  pin:'<svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
@@ -265,6 +279,39 @@ function normImportes(a){
 }
 const lineaSub=l=>r2(parseNum(l.cant)*parseNum(l.precio));
 function totales(list){const base=r2((list||[]).reduce((s,l)=>s+lineaSub(l),0)), iva=r2(base*IVA); return {base,iva,total:r2(base+iva)}}
+/* catálogo aprendido de códigos: localStorage cuaderno.codigos = {CODIGO:{desc,precio,usos,mod}} */
+const normCode=c=>String(c??'').trim().toUpperCase();
+let cat=(()=>{try{const c=JSON.parse(localStorage.getItem(CODES));if(c&&typeof c==='object'&&!Array.isArray(c))return c}catch(e){}return null})();
+function saveCat(){try{localStorage.setItem(CODES,JSON.stringify(cat))}catch(e){}}
+/* añade códigos que aparezcan en partes y aún no estén en el catálogo (no toca los ya conocidos) */
+function catFromJobs(list,seed){
+  let n=0; const nuevos=new Set();
+  const ord=[...(list||[])].sort((a,b)=>(a.mod||0)-(b.mod||0)); /* el parte más reciente deja su precio */
+  for(const j of ord) for(const l of normImportes(j.importes)){const c=normCode(l.codigo); if(!c) continue;
+    if(!cat[c]){cat[c]={desc:'',precio:0,usos:0,mod:j.mod||0};nuevos.add(c);n++}
+    if(seed||nuevos.has(c)){cat[c].usos++; if(l.desc.trim()) cat[c].desc=l.desc.trim(); if(l.precio) cat[c].precio=r2(l.precio); continue}
+    if(!cat[c].desc&&l.desc.trim()) cat[c].desc=l.desc.trim(); if(!cat[c].precio&&l.precio) cat[c].precio=r2(l.precio);}
+  return n;
+}
+/* al guardar un parte: el código queda con la última descripción y precio; usos +1 si es nuevo en ese parte */
+function learn(lines,prev){
+  const had=new Set((prev||[]).map(l=>normCode(l.codigo)));
+  for(const l of lines){const c=normCode(l.codigo); if(!c) continue; const o=cat[c]||{usos:0};
+    cat[c]={desc:l.desc||o.desc||'',precio:l.precio?r2(l.precio):(o.precio||0),usos:(o.usos||0)+(had.has(c)?0:1),mod:Date.now()};}
+  saveCat();
+}
+function mergeCat(imp){
+  if(!imp||typeof imp!=='object') return 0; let n=0;
+  for(const [k,v] of Object.entries(imp)){const c=normCode(k); if(!c||!v||typeof v!=='object') continue; const o=cat[c];
+    const x={desc:String(v.desc??''),precio:r2(parseNum(v.precio)),usos:+v.usos||0,mod:+v.mod||0};
+    if(!o){cat[c]=x;n++} else if(x.mod>(o.mod||0)){cat[c]={...x,usos:Math.max(x.usos,o.usos||0)};n++}}
+  saveCat(); return n;
+}
+function buscarCodigos(q,limit=6){
+  const f=fold(q); const all=Object.entries(cat).map(([c,v])=>({c,...v}));
+  const l=f?all.filter(x=>fold(x.c).includes(f)||fold(x.desc).includes(f)):all;
+  return l.sort((a,b)=>(fold(b.c).startsWith(f)-fold(a.c).startsWith(f))||(b.usos||0)-(a.usos||0)||a.c.localeCompare(b.c)).slice(0,limit);
+}
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('on'),2600)}
 
 function visible(){
@@ -423,7 +470,8 @@ function commit(msg){
   e.modalidad=readSel('modalidad'); e.proveedor=readSel('proveedor');
   const f=$('#e_fecha').value; if(f) e.fecha=new Date(f).toISOString();
   const v=$('#e_visita').value; e.visita=v&&!isNaN(new Date(v))?new Date(v).toISOString():''; if(e.visita) e.checks={...(e.checks||{}),cita:true};
-  e.importes=normImportes(e.importes).filter(l=>l.codigo.trim()||l.desc.trim()||l.precio).map(l=>({...l,codigo:l.codigo.trim(),desc:l.desc.trim()}));
+  e.importes=normImportes(e.importes).filter(l=>l.codigo.trim()||l.desc.trim()||l.precio).map(l=>({...l,codigo:normCode(l.codigo),desc:l.desc.trim()}));
+  learn(e.importes,(jobs.find(x=>x.id===e.id)||{}).importes);
   e.mod=Date.now();
   const isNew=e._new; delete e._new;
   if(isNew){e.orden=Math.max(0,...jobs.map(j=>j.orden||0))+1;jobs.push(e)} else {const i=jobs.findIndex(x=>x.id===e.id);jobs[i]=e}
@@ -439,11 +487,28 @@ function renderImportes(){
     <span class="isub">${eur(lineaSub(l))}</span>
     <button type="button" class="del" data-del="${i}" aria-label="Borrar línea">${ICON.trash}</button></div></div>`).join(''):'<p class="hint" style="margin:2px 0 0">Sin importes. Añade los códigos y precios de facturación.</p>';
   renderImpTot();
+  const upd=(box,l)=>{box.querySelector(".isub").textContent=eur(lineaSub(l)); renderImpTot()};
+  const setIn=(box,k,v)=>box.querySelector(`[data-k=${k}]`).value=v;
+  const fill=(box,l,c,all)=>{const v=cat[c]; if(!v) return;
+    if(all||!String(l.desc).trim()){l.desc=v.desc||'';setIn(box,'desc',l.desc)}
+    if(all||!parseNum(l.precio)){l.precio=v.precio||0;setIn(box,'precio',l.precio?r2(l.precio).toFixed(2).replace('.',','):'')}
+    if(all){l.codigo=c;setIn(box,'codigo',c)} upd(box,l)};
+  const hideSug=()=>document.querySelectorAll('#imps .sug').forEach(x=>x.remove());
+  const showSug=(box,q)=>{hideSug(); const r=buscarCodigos(q); if(!r.length||(r.length===1&&r[0].c===normCode(q))) return;
+    const d=document.createElement('div'); d.className='sug';
+    d.innerHTML=r.map(x=>`<button type="button" data-code="${esc(x.c)}"><b>${esc(x.c)}</b><span class="sd">${esc(x.desc||'')}</span><span class="sp">${x.precio?eur(x.precio):''}</span></button>`).join('');
+    d.onpointerdown=ev=>ev.preventDefault();
+    d.onclick=ev=>{const b=ev.target.closest('[data-code]'); if(!b) return; fill(box,L[+box.dataset.i],b.dataset.code,true); hideSug(); box.querySelector('[data-k=cant]').focus()};
+    box.appendChild(d)};
   $('#imps').oninput=ev=>{
     const k=ev.target.dataset.k, box=ev.target.closest('.imp'); if(!k||!box) return; const l=L[+box.dataset.i];
     l[k]=(k==='cant'||k==='precio')?(ev.target.value.trim()===''&&k==='cant'?'':parseNum(ev.target.value)):ev.target.value;
-    box.querySelector(".isub").textContent=eur(lineaSub(l)); renderImpTot();
+    if(k==='codigo'){const c=normCode(l.codigo); if(cat[c]) fill(box,l,c,false)}
+    if(k==='codigo'||k==='desc'){const q=ev.target.value.trim(); if(q) showSug(box,q); else hideSug()}
+    upd(box,l);
   };
+  $('#imps').onfocusin=ev=>{const box=ev.target.closest('.imp'); if(ev.target.dataset.k==='codigo'&&box&&!ev.target.value.trim()&&Object.keys(cat).length) showSug(box,'')};
+  $('#imps').onfocusout=ev=>{const box=ev.target.closest('.imp'); if(ev.target.dataset.k==='codigo'&&box){const l=L[+box.dataset.i]; l.codigo=normCode(l.codigo); ev.target.value=l.codigo; if(cat[l.codigo]) fill(box,l,l.codigo,false)} setTimeout(()=>{if(!document.activeElement?.closest?.('.imp [data-k=codigo],.imp [data-k=desc]')) hideSug()},150)};
   $('#imps').onclick=ev=>{const b=ev.target.closest('[data-del]'); if(!b) return; L.splice(+b.dataset.del,1); renderImportes();};
   $('#addImp').onclick=()=>{L.push({codigo:'',desc:'',cant:1,precio:0}); renderImportes(); const ins=$('#imps').querySelectorAll('.imp:last-child input'); if(ins[0]) ins[0].focus();};
 }
@@ -473,23 +538,44 @@ $('#bData').onclick=()=>{
   openSheet(`<h2>Copia de seguridad</h2><div class="menu">
   <button class="btn soft" id="mExp">⬇️&nbsp; Exportar todo (archivo .json)</button>
   <button class="btn soft" id="mImp">⬆️&nbsp; Importar copia (.json)</button>
-  <button class="btn soft" id="mSync">🔄&nbsp; Leer partes nuevos ahora</button></div>
+  <button class="btn soft" id="mSync">🔄&nbsp; Leer partes nuevos ahora</button>
+  <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
   <p class="hint">${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
+  $('#mCod').onclick=openCodigos;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
   $('#mSync').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));sync(true)};
   $('#mOk').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));closeSheet();if(cfg.url)sync()};
 };
+function openCodigos(){
+  openSheet(`<h2>Códigos y precios</h2>
+  <p class="hint" style="margin-top:-6px">Se aprenden solos al guardar los importes de cada parte. Precios sin IVA.</p>
+  <div class="f"><input id="cQ" type="search" placeholder="Buscar código o descripción…" autocomplete="off"></div>
+  <div id="cList"></div>
+  <div class="actions sticky"><button class="btn primary" id="cOk">Hecho</button></div>`);
+  const draw=()=>{const r=buscarCodigos($('#cQ').value.trim(),1e4);
+    $('#cList').innerHTML=r.length?r.map(x=>`<div class="cat" data-c="${esc(x.c)}"><div class="ch"><b>${esc(x.c)}</b><span>${x.usos||0} ${x.usos===1?'uso':'usos'}</span></div>
+    <div class="cr"><input data-k="desc" value="${esc(x.desc||'')}" placeholder="Descripción"><input data-k="precio" inputmode="decimal" value="${x.precio?r2(x.precio).toFixed(2).replace('.',','):''}" placeholder="0,00 €">
+    <button type="button" class="del" data-del="1" aria-label="Borrar código">${ICON.trash}</button></div></div>`).join(''):'<p class="hint">Aún no hay códigos. Añade importes en un parte y guárdalo.</p>'};
+  draw();
+  $('#cQ').oninput=draw;
+  $('#cList').onchange=ev=>{const box=ev.target.closest('.cat'), k=ev.target.dataset.k; if(!box||!k) return; const v=cat[box.dataset.c]; if(!v) return;
+    if(k==='precio'){v.precio=r2(parseNum(ev.target.value)); ev.target.value=v.precio?v.precio.toFixed(2).replace('.',','):''} else v.desc=ev.target.value.trim();
+    v.mod=Date.now(); saveCat(); toast('Código '+box.dataset.c+' guardado')};
+  $('#cList').onclick=ev=>{const b=ev.target.closest('[data-del]'); if(!b) return; const c=b.closest('.cat').dataset.c;
+    if(confirm('¿Borrar el código '+c+' del catálogo? (los partes no cambian)')){delete cat[c]; saveCat(); draw(); toast('Código borrado')}};
+  $('#cOk').onclick=closeSheet;
+}
 function exportJSON(){
-  const blob=new Blob([JSON.stringify({app:'cuaderno',version:1,exportado:new Date().toISOString(),partes:jobs},null,1)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({app:'cuaderno',version:1,exportado:new Date().toISOString(),partes:jobs,codigos:cat},null,1)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cuaderno-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();toast('Copia descargada');
 }
 $('#fileImport').onchange=async ev=>{
   const f=ev.target.files[0]; ev.target.value=''; if(!f) return;
   try{const d=JSON.parse(await f.text()); const list=Array.isArray(d)?d:d.partes; if(!Array.isArray(list)) throw 0;
-    const n=merge(list,true); save(); closeSheet(); render(); toast(`Importados: ${n.added} nuevos, ${n.updated} actualizados`);
+    const n=merge(list,true); save(); if(!Array.isArray(d)) mergeCat(d.codigos); catFromJobs(list); saveCat(); closeSheet(); render(); toast(`Importados: ${n.added} nuevos, ${n.updated} actualizados`);
   }catch(e){toast('Ese archivo no es una copia válida')}
 };
 /* merge by numero (or id). overwrite=true replaces existing (import), false only adds new (sync) */
@@ -549,12 +635,13 @@ function importFromHash(){
   try{
     let raw=decodeURIComponent(m[1]); const d=JSON.parse(b64urlToText(raw));
     const list=Array.isArray(d)?d:d.partes; if(!Array.isArray(list)) throw 0;
-    const n=merge(list,false); save(); render();
+    const n=merge(list,false); save(); if(!Array.isArray(d)) mergeCat(d.codigos); catFromJobs(list); saveCat(); render();
     toast(n.added?(n.added===1?'1 siniestro importado':n.added+' siniestros importados'):'Esos siniestros ya estaban en la app');
   }catch(e){toast('El enlace de importación no es válido')}
   return true;
 }
 addEventListener('hashchange',importFromHash);
+if(!cat){cat={};catFromJobs(jobs,true);saveCat()}
 render();
 importFromHash();
 firstRun().then(()=>sync());
