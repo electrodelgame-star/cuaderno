@@ -190,7 +190,7 @@ nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line)
 
 <script>
 'use strict';
-const KEY='cuaderno.v1', CFG='cuaderno.cfg', CODES='cuaderno.codigos', DEAD='cuaderno.borrados';
+const KEY='cuaderno.v1', CFG='cuaderno.cfg', CODES='cuaderno.codigos', DEAD='cuaderno.borrados', TOMB='cuaderno.borradosIds';
 const BK='cuaderno.backup.', RESC=KEY+'.rescate-', BK_DAYS=7, RESC_MAX=6; /* arriba del todo: load() los usa al arrancar */
 const ICON={
  phone:'<svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
@@ -280,8 +280,8 @@ function copiaDiaria(){
     const m=jobs.length; if(!m) return false;
     const k=BK+hoyKey(), prev=localStorage.getItem(k);
     if(prev&&encoge(cuenta(prev),m)) return false;
-    let c={},b={}; try{c=cat||{}}catch(e){} try{b=dead||{}}catch(e){}
-    const ok=setConEspacio(k,JSON.stringify({t:Date.now(),partes:sinFotos(jobs),codigos:c,borrados:b}));
+    let c={},b={},tb={}; try{c=cat||{}}catch(e){} try{b=dead||{}}catch(e){} try{tb=tomb||{}}catch(e){}
+    const ok=setConEspacio(k,JSON.stringify({t:Date.now(),partes:sinFotos(jobs),codigos:c,borrados:b,borradosIds:tb}));
     podaCopias(); return ok;
   }catch(e){return false}
 }
@@ -349,15 +349,46 @@ function totales(list){const base=r2((list||[]).reduce((s,l)=>s+lineaSub(l),0)),
 const normNum=n=>String(n??'').trim().toUpperCase().replace(/\s+/g,'');
 let dead=(()=>{try{const d=JSON.parse(localStorage.getItem(DEAD));if(d&&typeof d==='object'&&!Array.isArray(d))return d}catch(e){}return {}})();
 function saveDead(){try{localStorage.setItem(DEAD,JSON.stringify(dead))}catch(e){toast('Memoria llena: no se pudo guardar el borrado')}}
+/* v15 · los borrados (copia completa, con «Recuperar») se guardan 7 días desde x.borrado y luego se purgan.
+   Del purgado queda una lápida mínima en cuaderno.borradosIds = {clave:{id,numero,b}} (b = fecha del borrado) para que
+   ni la lectura del correo (la hoja devuelve las últimas 300 filas, meses de partes) ni los enlaces lo vuelvan a meter.
+   Las lápidas ocupan ~60 bytes: se guardan 1 año (más que la ventana de 300 filas) con un tope de 3000. */
+const DEAD_DAYS=7, TOMB_DAYS=365, TOMB_MAX=3000;
+let tomb=(()=>{try{const d=JSON.parse(localStorage.getItem(TOMB));if(d&&typeof d==='object'&&!Array.isArray(d))return d}catch(e){}return {}})();
+function saveTomb(){try{localStorage.setItem(TOMB,JSON.stringify(tomb))}catch(e){}}
+function diasQuedan(x){return Math.max(0,Math.ceil(((+x.borrado||Date.now())+DEAD_DAYS*864e5-Date.now())/864e5))}
+function purgaBorrados(){
+  const now=Date.now(); let cd=false, ct=false;
+  for(const [k,x] of Object.entries(dead)){
+    if(!x||typeof x!=='object'){delete dead[k];cd=true;continue}
+    if(!(+x.borrado>0)){x.borrado=now;cd=true}            /* registros antiguos sin fecha: cuentan desde hoy */
+    if(now-x.borrado>=DEAD_DAYS*864e5){ tomb[k]={id:String(x.id||''),numero:String(x.numero||''),b:+x.borrado}; delete dead[k]; cd=ct=true; }
+  }
+  for(const [k,x] of Object.entries(tomb)){
+    if(!x||typeof x!=='object'){delete tomb[k];ct=true}
+    else if(!(+x.b>0)){x.b=now;ct=true}
+    else if(now-x.b>=TOMB_DAYS*864e5){delete tomb[k];ct=true} }
+  const rest=Object.entries(tomb); if(rest.length>TOMB_MAX){ rest.sort((a,b)=>(a[1].b||0)-(b[1].b||0)).slice(0,rest.length-TOMB_MAX).forEach(([k])=>delete tomb[k]); ct=true; }
+  if(cd) saveDead(); if(ct) saveTomb(); return cd||ct;
+}
+function mergeTomb(imp){
+  if(!imp||typeof imp!=='object'||Array.isArray(imp)) return;
+  for(const [k,x] of Object.entries(imp)){ if(!x||typeof x!=='object') continue; const b=+x.b||Date.now();
+    if(!tomb[k]||b>(tomb[k].b||0)) tomb[k]={id:String(x.id||''),numero:String(x.numero||''),b}; }
+  saveTomb();
+}
 const deadKey=j=>normNum(j.numero)||('id:'+String(j.id||''));
 function isDead(r){const n=normNum(r.numero??r.siniestro), id=String(r.id||'');
-  return !!((n&&dead[n])||Object.values(dead).some(x=>(id&&x.id===id)||(n&&normNum(x.numero)===n)));}
-function bury(j){const {fotos,...parte}=j; dead[deadKey(j)]={t:Date.now(),id:j.id,numero:j.numero||'',dir:fullAddr(j),parte}; saveDead();}
-function unbury(j){const n=normNum(j.numero); for(const [k,x] of Object.entries(dead)) if(k===deadKey(j)||(n&&normNum(x.numero)===n)||(j.id&&x.id===j.id)) delete dead[k]; saveDead();}
+  const hit=x=>x&&((id&&x.id===id)||(n&&normNum(x.numero)===n));
+  return !!((n&&(dead[n]||tomb[n]))||Object.values(dead).some(hit)||Object.values(tomb).some(hit));}
+function bury(j){const {fotos,...parte}=j; dead[deadKey(j)]={t:Date.now(),borrado:Date.now(),id:j.id,numero:j.numero||'',dir:fullAddr(j),parte}; saveDead();}
+function unbury(j){const n=normNum(j.numero), m=(k,x)=>k===deadKey(j)||(n&&normNum(x&&x.numero)===n)||(j.id&&x&&x.id===j.id);
+  for(const [k,x] of Object.entries(dead)) if(m(k,x)) delete dead[k]; saveDead();
+  let c=false; for(const [k,x] of Object.entries(tomb)) if(m(k,x)){delete tomb[k];c=true} if(c) saveTomb();}
 function mergeDead(imp){
   if(!imp||typeof imp!=='object') return; let quit=0;
   for(const [k,x] of Object.entries(imp)){ if(!x||typeof x!=='object') continue; const t=+x.t||0;
-    if(!dead[k]||t>(dead[k].t||0)) dead[k]={t,id:String(x.id||''),numero:String(x.numero||''),dir:String(x.dir||''),parte:x.parte&&typeof x.parte==='object'?x.parte:null};
+    if(!dead[k]||t>(dead[k].t||0)) dead[k]={t,borrado:+x.borrado>0?+x.borrado:(dead[k]&&dead[k].borrado||Date.now()),id:String(x.id||''),numero:String(x.numero||''),dir:String(x.dir||''),parte:x.parte&&typeof x.parte==='object'?x.parte:null};
     /* un borrado importado quita el parte local si este no se ha tocado después del borrado */
     const before=jobs.length; jobs=jobs.filter(j=>!(((x.id&&j.id===x.id)||(normNum(x.numero)&&normNum(j.numero)===normNum(x.numero)))&&(j.mod||0)<=t)); quit+=before-jobs.length; }
   saveDead(); return quit;
@@ -718,21 +749,24 @@ function restaurar(k){
   let d=null; try{d=JSON.parse(localStorage.getItem(k))}catch(e){}
   const list=listaDe(d); if(!list){toast('Esa copia no se puede leer');return false}
   if(!confirm(`¿Restaurar esta copia (${list.length} partes)?\n\nLos ${jobs.length} partes que tienes ahora se guardan antes como copia de rescate, por si acaso.`)) return false;
-  let snap=false; try{snap=guardaRescate(JSON.stringify({t:Date.now(),motivo:'antes de restaurar',partes:jobs,codigos:cat,borrados:dead}))}catch(e){}
+  let snap=false; try{snap=guardaRescate(JSON.stringify({t:Date.now(),motivo:'antes de restaurar',partes:jobs,codigos:cat,borrados:dead,borradosIds:tomb}))}catch(e){}
   if(!snap&&!confirm('No hay espacio para guardar antes lo actual. ¿Restaurar igualmente?')) return false;
   const fotosDe=new Map(); for(const j of jobs) if(j.fotos&&j.fotos.length){fotosDe.set('id:'+j.id,j.fotos); if(normNum(j.numero)) fotosDe.set(normNum(j.numero),j.fotos)}
   jobs=migrate(JSON.parse(JSON.stringify(list))).map(j=>({...j,fotos:Array.isArray(j.fotos)&&j.fotos.length?j.fotos:(fotosDe.get('id:'+j.id)||fotosDe.get(normNum(j.numero))||[])}));
   if(!Array.isArray(d)){
     if(d.codigos&&typeof d.codigos==='object'&&!Array.isArray(d.codigos)){cat=d.codigos;saveCat()}
     if(d.borrados&&typeof d.borrados==='object'&&!Array.isArray(d.borrados)){dead=d.borrados;saveDead()}
+    /* lápidas: las de la copia + las actuales, salvo las de partes que vuelven con la copia */
+    const keep=Object.entries(tomb).filter(([k,x])=>!jobs.some(j=>(x.id&&j.id===x.id)||(normNum(x.numero)&&normNum(j.numero)===normNum(x.numero))));
+    tomb={...Object.fromEntries(keep),...(d.borradosIds&&typeof d.borradosIds==='object'&&!Array.isArray(d.borradosIds)?d.borradosIds:{})}; saveTomb(); purgaBorrados();
   }
   save({force:true}); closeSheet(); render(); toast('Copia restaurada: '+jobs.length+' partes'); return true;
 }
 function openBorrados(){
-  const l=Object.entries(dead).sort((a,b)=>(b[1].t||0)-(a[1].t||0));
+  purgaBorrados(); const l=Object.entries(dead).sort((a,b)=>(+b[1].borrado||b[1].t||0)-(+a[1].borrado||a[1].t||0));
   openSheet(`<h2>Borrados</h2>
-  <p class="hint" style="margin-top:-6px">Estos partes no vuelven a entrar al leer el correo. Pulsa “Recuperar” si borraste uno por error.</p>
-  <div id="dList">${l.length?l.map(([k,x])=>`<div class="cat" data-k="${esc(k)}"><div class="ch"><b>${esc(x.numero||'(sin nº)')}</b><span>borrado ${esc(new Date(x.t).toLocaleDateString('es-ES',{day:'numeric',month:'short'}))}</span></div>
+  <p class="hint" style="margin-top:-6px">Estos partes no vuelven a entrar al leer el correo. Pulsa “Recuperar” si borraste uno por error. Se guardan ${DEAD_DAYS} días; después se eliminan del todo (y siguen sin volver a entrar).</p>
+  <div id="dList">${l.length?l.map(([k,x])=>`<div class="cat" data-k="${esc(k)}"><div class="ch"><b>${esc(x.numero||'(sin nº)')}</b><span>borrado ${esc(new Date(+x.borrado||x.t).toLocaleDateString('es-ES',{day:'numeric',month:'short'}))} · ${(n=>n<=1?'se elimina hoy':'quedan '+n+' días')(diasQuedan(x))}</span></div>
     <div style="display:flex;gap:8px;align-items:center"><span style="flex:1;font-size:14px;color:var(--brown-2)">${esc(x.dir||(x.parte&&fullAddr(x.parte))||'')}</span><button type="button" class="btn primary" data-rec="1" style="min-width:120px">Recuperar</button></div></div>`).join(''):'<p class="hint">No hay partes borrados.</p>'}</div>
   <div class="actions sticky"><button class="btn soft" id="dOk">Cerrar</button></div>`);
   $('#dOk').onclick=closeSheet;
@@ -763,13 +797,13 @@ function openCodigos(){
   $('#cOk').onclick=closeSheet;
 }
 function exportJSON(){
-  const blob=new Blob([JSON.stringify({app:'cuaderno',version:1,exportado:new Date().toISOString(),partes:jobs,codigos:cat,borrados:dead},null,1)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({app:'cuaderno',version:1,exportado:new Date().toISOString(),partes:jobs,codigos:cat,borrados:dead,borradosIds:tomb},null,1)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cuaderno-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();toast('Copia descargada');
 }
 $('#fileImport').onchange=async ev=>{
   const f=ev.target.files[0]; ev.target.value=''; if(!f) return;
   try{const d=JSON.parse(await f.text()); const list=Array.isArray(d)?d:d.partes; if(!Array.isArray(list)) throw 0;
-    if(!Array.isArray(d)) mergeDead(d.borrados);
+    if(!Array.isArray(d)){ mergeTomb(d.borradosIds); mergeDead(d.borrados); purgaBorrados(); }
     const n=merge(list,true); save(); if(!Array.isArray(d)) mergeCat(d.codigos); catFromJobs(list.filter(r=>!isDead(r))); saveCat(); closeSheet(); render(); toast(`Importados: ${n.added} nuevos, ${n.updated} actualizados`);
   }catch(e){toast('Ese archivo no es una copia válida')}
 };
@@ -831,7 +865,7 @@ function importFromHash(){
   try{
     let raw=decodeURIComponent(m[1]); const d=JSON.parse(b64urlToText(raw));
     const list=Array.isArray(d)?d:d.partes; if(!Array.isArray(list)) throw 0;
-    if(!Array.isArray(d)) mergeDead(d.borrados);
+    if(!Array.isArray(d)){ mergeTomb(d.borradosIds); mergeDead(d.borrados); purgaBorrados(); }
     const n=merge(list,false); save(); if(!Array.isArray(d)) mergeCat(d.codigos); catFromJobs(list.filter(r=>!isDead(r))); saveCat(); render();
     toast(n.added?(n.added===1?'1 siniestro importado':n.added+' siniestros importados'):n.skipped&&!n.updated?'Esos siniestros los habías borrado (recupéralos en Copia de seguridad → Borrados)':'Esos siniestros ya estaban en la app');
   }catch(e){toast('El enlace de importación no es válido')}
@@ -839,12 +873,14 @@ function importFromHash(){
 }
 addEventListener('hashchange',importFromHash);
 if(!cat){cat={};catFromJobs(jobs,true);saveCat()}
+purgaBorrados();
 copiaDiaria();
 render();
 importFromHash();
 firstRun().then(()=>sync());
-setInterval(()=>{render()},60000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){copiaDiaria();sync();render()}});
+let diaRevision=hoyKey(); /* purga y copia diaria también si la app se queda abierta al cambiar de día */
+setInterval(()=>{ if(hoyKey()!==diaRevision){diaRevision=hoyKey();purgaBorrados();copiaDiaria()} render()},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){purgaBorrados();copiaDiaria();sync();render()}});
 </script>
 </body>
 </html>
