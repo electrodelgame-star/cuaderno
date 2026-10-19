@@ -213,12 +213,12 @@ const ICON={
 const TABS=[['notas','Delgame',ICON.notas],['iris','Iris',ICON.iris],['lucia','Lucía',ICON.lucia],['particular','Partic.',ICON.part],['pendiente','Pendiente',ICON.pend],['archivo','Archivo',ICON.arch]];
 const CHECKS=[['cita','Cita'],['obra','Obra'],['fotos','Fotos'],['factura','Factura'],['cobro','Cobro']];
 const COMP={iris:'Iris',lucia:'Santa Lucía',particular:'Particular'};
-const MODS=['Asistencia','Bricoasistencia','Daños agua','DAE','Conexión'], PROVS=['Santa Lucía','CaixaBank','Naturgy','Anovo'];
+const MODS=['Asistencia','Bricoasistencia','Daños agua','DAE','Conexión'], PROVS=['Santa Lucía','SegurCaixa','Naturgy','Anovo'];
 const fold=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const modClass=m=>({asistencia:'m-asistencia',bricoasistencia:'m-brico','danos agua':'m-agua',dae:'m-dae',conexion:'m-conexion'})[fold(m)]||'';
 const provClass=p=>{const f=fold(p);return f.includes('lucia')?'p-lucia':f.includes('caixa')?'p-caixa':f.includes('naturgy')?'p-naturgy':f.includes('anovo')?'p-anovo':'p-otro'};
 /* canoniza a la opción de la lista si coincide (sin acentos/mayúsculas); si no, deja el texto libre */
-function canon(v,opts){const t=String(v??'').trim();if(!t)return '';const f=fold(t).replace(/^danos? (por |de )?agua$/,'danos agua').replace(/^santa? ?lucia.*$/,'santa lucia').replace(/^caixa ?bank$/,'caixabank');return opts.find(o=>fold(o)===f)||t}
+function canon(v,opts){const t=String(v??'').trim();if(!t)return '';const f=fold(t).replace(/^danos? (por |de )?agua$/,'danos agua').replace(/^santa? ?lucia.*$/,'santa lucia').replace(/^(caixa ?bank|segur ?caixa( adeslas)?)$/,'segurcaixa');return opts.find(o=>fold(o)===f)||t}
 /* modalidad: campo explícito o, si el texto lo dice claramente (una sola coincidencia), se deduce */
 function guessModalidad(r){
   const ex=r.modalidad??r.modality??r.tipo_servicio??r.tipoServicio; if(ex) return canon(ex,MODS);
@@ -251,7 +251,7 @@ function load(){
 /* migraciones: un fallo aquí nunca debe vaciar la lista */
 function migrate(d){
   d=d.filter(j=>j&&typeof j==='object');
-  d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); if(!Array.isArray(j.fotos)) j.fotos=[]; }catch(e){} });
+  d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor&&/^(caixa ?bank|segur ?caixa)$/.test(fold(j.proveedor))) j.proveedor='SegurCaixa'; if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); if(!Array.isArray(j.fotos)) j.fotos=[]; }catch(e){} });
   return d;
 }
 /* ---- v14 · red de seguridad ----
@@ -761,7 +761,7 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v17 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v18 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
