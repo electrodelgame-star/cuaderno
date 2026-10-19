@@ -226,8 +226,9 @@ function chips(j){const m=String(j.modalidad||'').trim(), p=String(j.proveedor||
 
 let jobs=load(), cfg=JSON.parse(localStorage.getItem(CFG)||'{}'), tab='notas', query='', editing=null, deferredPrompt=null;
 
+const cleanPob=p=>String(p??'').replace(/\s*\([^)]*\)\s*$/,'').trim();
 function load(){
-  try{const d=JSON.parse(localStorage.getItem(KEY)); if(Array.isArray(d)){ d.forEach(j=>{ if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); }); return d; }}catch(e){}
+  try{const d=JSON.parse(localStorage.getItem(KEY)); if(Array.isArray(d)){ d.forEach(j=>{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); }); return d; }}catch(e){}
   return [];
 }
 async function firstRun(){
@@ -484,7 +485,7 @@ function toLocalInput(iso){const d=new Date(iso);if(isNaN(d))return '';const p=n
 function readSel(k){const s=$('#e_'+k);return s.value==='__otra'?$('#e_'+k+'_txt').value.trim():s.value}
 function commit(msg){
   const e=editing;
-  ['numero','telefono','asegurado','direccion','poblacion','averia','condiciones','notas'].forEach(k=>e[k]=$('#e_'+k).value.trim());
+  ['numero','telefono','asegurado','direccion','poblacion','averia','condiciones','notas'].forEach(k=>e[k]=$('#e_'+k).value.trim()); e.poblacion=cleanPob(e.poblacion);
   e.telefono=digits(e.telefono)||e.telefono;
   e.modalidad=readSel('modalidad'); e.proveedor=readSel('proveedor');
   const f=$('#e_fecha').value; if(f) e.fecha=new Date(f).toISOString();
@@ -631,7 +632,7 @@ function merge(list,overwrite){
 function normalize(r){
   let c=String(r.compania||r.company||'').toLowerCase();
   c=c.includes('iris')?'iris':c.includes('luc')?'lucia':c?'particular':'particular';
-  return {id:r.id||('x-'+(r.numero||Date.now().toString(36))),numero:String(r.numero||r.siniestro||''),compania:c,direccion:r.direccion||'',poblacion:r.poblacion||'',
+  return {id:r.id||('x-'+(r.numero||Date.now().toString(36))),numero:String(r.numero||r.siniestro||''),compania:c,direccion:r.direccion||'',poblacion:cleanPob(r.poblacion),
     telefono:digits(r.telefono)||String(r.telefono||''),asegurado:r.asegurado||'',averia:r.averia||'',condiciones:r.condiciones||'',notas:r.notas||'',fotos:Array.isArray(r.fotos)?r.fotos:[],
     fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},visita:normVisita(r.visita||r.horaVisita||r.hora_visita),importes:normImportes(r.importes),modalidad:guessModalidad(r),proveedor:(r.proveedor??r.provider)!=null?canon(r.proveedor??r.provider,PROVS):(c==='iris'||c==='lucia'?'Santa Lucía':''),archivado:!!r.archivado,mod:r.mod||0};
 }
