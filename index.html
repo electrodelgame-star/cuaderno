@@ -154,7 +154,7 @@ nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line)
 .photos .ph{position:relative;width:78px;height:78px;border-radius:10px;overflow:hidden;background:#eee}
 .photos img{width:100%;height:100%;object-fit:cover}
 .photos .x{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:11px;background:rgba(0,0,0,.6);color:#fff;font-size:14px;line-height:22px;text-align:center}
-.addph{width:78px;height:78px;border-radius:10px;border:1.5px dashed #BFB2A4;display:grid;place-items:center;color:var(--muted)}
+.addph{width:78px;height:78px;border-radius:10px;border:1.5px dashed #BFB2A4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted)}.addph .phl{font-size:11px;font-weight:700}
 .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .actions.sticky{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));background:var(--white);padding:10px 0 12px;margin-bottom:-8px;box-shadow:0 -6px 10px -6px rgba(0,0,0,.12)}
 .actions .btn{flex:1;min-width:120px}
@@ -196,6 +196,7 @@ nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line)
 <div class="viewer" id="viewer"><img id="viewerImg" alt=""></div>
 <input type="file" id="fileImport" accept="application/json,.json" hidden>
 <input type="file" id="filePhoto" accept="image/*" capture="environment" multiple hidden>
+<input type="file" id="fileGallery" accept="image/*" multiple hidden>
 
 <script>
 'use strict';
@@ -790,18 +791,19 @@ function renderImpTot(){
 }
 function renderPhotos(){
   const e=editing;
-  $('#photos').innerHTML=(e.fotos||[]).map((p,i)=>`<div class="ph"><img src="${p}" data-i="${i}"><button class="x" data-del="${i}">×</button></div>`).join('')+`<button class="addph" id="addPh" type="button"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>`;
-  $('#addPh').onclick=()=>$('#filePhoto').click();
+  $('#photos').innerHTML=(e.fotos||[]).map((p,i)=>`<div class="ph"><img src="${p}" data-i="${i}"><button class="x" data-del="${i}">×</button></div>`).join('')+`<button class="addph" id="addPh" type="button"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="phl">Cámara</span></button><button class="addph" id="addGal" type="button"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-5 4 4 2.5-2.5L20 17"/></svg><span class="phl">Galería</span></button>`;
+  $('#addPh').onclick=()=>$('#filePhoto').click(); $('#addGal').onclick=()=>$('#fileGallery').click();
   $('#photos').onclick=ev=>{
     const d=ev.target.dataset.del; if(d!==undefined){e.fotos.splice(+d,1);renderPhotos();return}
     const i=ev.target.dataset.i; if(i!==undefined){$('#viewerImg').src=e.fotos[+i];$('#viewer').classList.add('on')}
   };
 }
 $('#viewer').onclick=()=>$('#viewer').classList.remove('on');
-$('#filePhoto').onchange=async ev=>{
+const addFotos=async ev=>{
   for(const file of ev.target.files){ try{ editing.fotos=[...(editing.fotos||[]),await shrink(file)] }catch(e){toast('No se pudo leer la foto')} }
   ev.target.value=''; renderPhotos();
 };
+$('#filePhoto').onchange=addFotos; $('#fileGallery').onchange=addFotos;
 function shrink(file,max=1000,q=.62){return new Promise((ok,ko)=>{const img=new Image();img.onload=()=>{const r=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=img.width*r;c.height=img.height*r;c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(img.src);ok(c.toDataURL('image/jpeg',q))};img.onerror=ko;img.src=URL.createObjectURL(file)})}
 $('#bAdd').onclick=()=>openEdit(null);
 
@@ -816,7 +818,7 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v19 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v20 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
