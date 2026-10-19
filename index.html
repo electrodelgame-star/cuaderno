@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2B1E1A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cuaderno">
+<title>Cuaderno</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#ECE5D8; --bg-dot:#DCD3C3; --brown:#2B1E1A; --brown-2:#4A3A33; --teal:#0E6E64; --teal-2:#0B5A52;
+  --card:#F7E6E3; --card-iris:#E3ECEF; --card-part:#EFEBDD; --line:#9E2238; --chip:#EADBD7; --muted:#7A6B63;
+  --white:#FFFDF9; --ok:#2E7D4F;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);
+  background-image:radial-gradient(var(--bg-dot) 1px,transparent 1px);background-size:18px 18px;color:var(--brown);
+  padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+header{position:sticky;top:0;z-index:20;background:var(--brown);color:#F4ECE0;padding:calc(12px + env(safe-area-inset-top)) 18px 12px}
+.hrow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
+.sub{font-size:13px;opacity:.75;margin-bottom:2px}
+h1{font-family:Georgia,"Times New Roman",serif;font-weight:600;font-size:26px;margin:0;letter-spacing:.2px}
+.hicons{display:flex;gap:6px}
+.hicons button{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;color:#F4ECE0}
+.hicons button:active{background:rgba(255,255,255,.12)}
+#searchBar{display:none;margin-top:10px}
+#searchBar.on{display:flex;gap:8px}
+#q{flex:1;border:0;border-radius:12px;padding:11px 14px;font-size:16px;background:#F4ECE0;color:var(--brown)}
+main{padding:12px 10px}
+.install{width:100%;display:flex;align-items:center;gap:12px;background:var(--teal);color:#fff;border-radius:16px;padding:15px 18px;font-size:17px;margin-bottom:14px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.install[hidden]{display:none}
+.card{position:relative;background:var(--card);border-radius:14px;border-left:5px solid var(--line);padding:12px 12px 10px 10px;margin-bottom:12px;box-shadow:0 1px 4px rgba(60,30,20,.12)}
+.card.iris{background:var(--card-iris);border-left-color:#1E5A78}
+.card.particular{background:var(--card-part);border-left-color:#8A6A2E}
+.card.done{opacity:.8}
+.top{display:flex;gap:6px}
+.arrows{display:flex;flex-direction:column;align-items:center;color:#B7A8A2;padding-top:2px}
+.arrows button{width:26px;height:22px;display:grid;place-items:center}
+.arrows svg{width:16px;height:16px}
+.ttl{flex:1;min-width:0}
+.addr{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:18px;line-height:1.25;margin:2px 0 4px;cursor:pointer}
+.meta{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.num{font-weight:800;font-size:17px;letter-spacing:.3px}
+.ago{color:var(--muted);font-size:14px;white-space:nowrap}
+.who{font-size:13px;color:var(--brown-2);margin-top:2px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(43,30,26,.08);margin-right:6px;text-transform:uppercase;letter-spacing:.4px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;border-radius:10px;padding:11px 8px;font-size:15px;font-weight:600;text-decoration:none;color:inherit;min-height:44px}
+.btn svg{width:18px;height:18px}
+.call{background:var(--brown);color:#fff}
+.wa{background:var(--teal);color:#fff}
+.soft{background:var(--chip);color:var(--brown)}
+.iris .soft{background:#D3DFE4}.particular .soft{background:#E2DCC8}
+.checks{display:grid;grid-template-columns:repeat(5,1fr);margin-top:10px}
+.checks label{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:13px;color:var(--brown-2);cursor:pointer}
+.checks input{appearance:none;-webkit-appearance:none;width:26px;height:26px;border:1.5px solid #B9A9A3;border-radius:7px;background:#F6EEEC;display:grid;place-items:center;margin:0}
+.checks input:checked{background:var(--teal);border-color:var(--teal)}
+.checks input:checked::after{content:"";width:7px;height:13px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.empty{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}
+.fab{position:fixed;right:20px;bottom:calc(98px + env(safe-area-inset-bottom));width:66px;height:66px;border-radius:20px;background:var(--teal);color:#fff;display:grid;place-items:center;box-shadow:0 6px 16px rgba(14,110,100,.35);z-index:15}
+.fab svg{width:30px;height:30px;stroke-width:2.2}
+nav{position:fixed;left:0;right:0;bottom:0;background:#F6F1E8;border-top:1px solid #DDD3C4;display:grid;grid-template-columns:repeat(6,1fr);padding:8px 2px calc(8px + env(safe-area-inset-bottom));z-index:20}
+nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;color:#5E4F48;padding:4px 0;position:relative}
+nav .ic{width:50px;height:32px;border-radius:16px;display:grid;place-items:center}
+nav button.on{color:var(--teal);font-weight:700}
+nav button.on .ic{background:#D3E4DE}
+nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line);color:#fff;font-size:10px;font-weight:700;border-radius:9px;min-width:17px;height:17px;display:grid;place-items:center;padding:0 4px}
+/* sheet */
+.veil{position:fixed;inset:0;background:rgba(30,20,15,.45);z-index:40;display:none}
+.veil.on{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92vh;overflow:auto;background:var(--white);border-radius:20px 20px 0 0;z-index:41;transform:translateY(105%);transition:transform .22s ease;padding:8px 16px calc(20px + env(safe-area-inset-bottom))}
+.sheet.on{transform:none}
+.grab{width:44px;height:5px;border-radius:3px;background:#D6CCC0;margin:4px auto 10px}
+.sheet h2{font-family:Georgia,serif;margin:0 0 12px;font-size:21px}
+.f{margin-bottom:11px}
+.f label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
+.f input,.f textarea,.f select{width:100%;border:1.5px solid #E0D6CA;border-radius:11px;padding:11px 12px;font-size:16px;background:#FBF7F1;color:var(--brown);font-family:inherit}
+.f textarea{min-height:70px;resize:vertical}
+.f input:focus,.f textarea:focus,.f select:focus{outline:none;border-color:var(--teal)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg button{border:1.5px solid #E0D6CA;border-radius:10px;padding:10px 4px;font-weight:600;background:#FBF7F1}
+.seg button.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+.photos{display:flex;flex-wrap:wrap;gap:8px}
+.photos .ph{position:relative;width:78px;height:78px;border-radius:10px;overflow:hidden;background:#eee}
+.photos img{width:100%;height:100%;object-fit:cover}
+.photos .x{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:11px;background:rgba(0,0,0,.6);color:#fff;font-size:14px;line-height:22px;text-align:center}
+.addph{width:78px;height:78px;border-radius:10px;border:1.5px dashed #BFB2A4;display:grid;place-items:center;color:var(--muted)}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.actions.sticky{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));background:var(--white);padding:10px 0 12px;margin-bottom:-8px;box-shadow:0 -6px 10px -6px rgba(0,0,0,.12)}
+.actions .btn{flex:1;min-width:120px}
+.danger{background:#F3DADA;color:#8E1B1B}
+.primary{background:var(--teal);color:#fff}
+.menu .btn{width:100%;justify-content:flex-start;margin-bottom:8px;padding:14px}
+.hint{font-size:13px;color:var(--muted);line-height:1.45}
+.toast{position:fixed;left:50%;bottom:calc(104px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--brown);color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:90vw;text-align:center}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.viewer{position:fixed;inset:0;background:#000;z-index:70;display:none;align-items:center;justify-content:center}
+.viewer.on{display:flex}.viewer img{max-width:100%;max-height:100%}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div><div class="sub" id="syncState">Sin lectura del correo</div><h1 id="title">Notas</h1></div>
+    <div class="hicons">
+      <button id="bSearch" aria-label="Buscar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></button>
+      <button id="bData" aria-label="Copia de seguridad"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button>
+      <button id="bInstall2" aria-label="Instalar"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 7v6M9.5 10.5L12 13l2.5-2.5"/></svg></button>
+    </div>
+  </div>
+  <div id="searchBar"><input id="q" type="search" placeholder="Buscar dirección, nº, nombre, teléfono…" autocomplete="off"></div>
+</header>
+
+<main>
+  <button class="install" id="bInstall" hidden><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 7v6M9.5 10.5L12 13l2.5-2.5"/></svg>Poner en el escritorio</button>
+  <div id="list"></div>
+</main>
+
+<button class="fab" id="bAdd" aria-label="Añadir parte"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+
+<nav id="tabs"></nav>
+
+<div class="veil" id="veil"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+<div class="viewer" id="viewer"><img id="viewerImg" alt=""></div>
+<input type="file" id="fileImport" accept="application/json,.json" hidden>
+<input type="file" id="filePhoto" accept="image/*" capture="environment" multiple hidden>
+
+<script>
+'use strict';
+const KEY='cuaderno.v1', CFG='cuaderno.cfg';
+const ICON={
+ phone:'<svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
+ pin:'<svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+ up:'<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>', down:'<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
+ notas:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
+ iris:'<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6z"/></svg>',
+ lucia:'<svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="1.5"/><path d="M9 7h6M9 11h6M9 15h6M3 21h18"/></svg>',
+ part:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+ pend:'<svg viewBox="0 0 24 24"><path d="M4 6l2 2 3-3M4 14l2 2 3-3M12 7h8M12 15h8M12 19h6"/></svg>',
+ arch:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>',
+};
+const TABS=[['notas','Notas',ICON.notas],['iris','Iris',ICON.iris],['lucia','Lucía',ICON.lucia],['particular','Partic.',ICON.part],['pendiente','Pendiente',ICON.pend],['archivo','Archivo',ICON.arch]];
+const CHECKS=[['cita','Cita'],['obra','Obra'],['fotos','Fotos'],['factura','Factura'],['cobro','Cobro']];
+const COMP={iris:'Iris',lucia:'Santa Lucía',particular:'Particular'};
+
+/* Sin datos personales en el código: los partes llegan por sincronización, importación o seed.json (solo pruebas locales) */
+
+let jobs=load(), cfg=JSON.parse(localStorage.getItem(CFG)||'{}'), tab='notas', query='', editing=null, deferredPrompt=null;
+
+function load(){
+  try{const d=JSON.parse(localStorage.getItem(KEY)); if(Array.isArray(d)) return d;}catch(e){}
+  return [];
+}
+async function firstRun(){
+  if(localStorage.getItem(KEY)) return;
+  try{const r=await fetch('seed.json',{cache:'no-store'}); if(r.ok){const d=await r.json(); merge(Array.isArray(d)?d:d.partes||[],false);}}catch(e){}
+  save(); render();
+}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(jobs));return true}
+  catch(e){toast('Memoria llena: exporta una copia y borra fotos antiguas');return false}
+}
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const digits=t=>String(t||'').replace(/\D/g,'').replace(/^0034|^34(?=\d{9}$)/,'');
+const fmtTel=t=>{const d=digits(t);return d.length===9?d.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3'):t};
+const fullAddr=j=>[j.direccion,j.poblacion].filter(Boolean).join(' - ');
+function ago(iso){
+  const s=(Date.now()-new Date(iso))/1000; if(!(s>=0)) return '';
+  if(s<60) return 'ahora'; const m=Math.floor(s/60); if(m<60) return m+' min';
+  const h=Math.floor(m/60); if(h<24) return h+(h===1?' hora':' horas');
+  const d=Math.floor(h/24); if(d<30) return d+(d===1?' día':' días');
+  return new Date(iso).toLocaleDateString('es-ES');
+}
+function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('on'),2600)}
+
+function visible(){
+  let l=jobs.filter(j=>{
+    if(tab==='archivo') return j.archivado;
+    if(j.archivado) return false;
+    if(tab==='notas') return true;
+    if(tab==='pendiente') return !(j.checks||{}).cobro;
+    return j.compania===tab;
+  });
+  if(query){const q=query.toLowerCase();l=l.filter(j=>[j.numero,j.direccion,j.poblacion,j.telefono,j.asegurado,j.averia,j.notas,j.condiciones].join(' ').toLowerCase().includes(q)||digits(j.telefono).includes(q.replace(/\s/g,'')))}
+  return l.sort((a,b)=>(b.orden||0)-(a.orden||0));
+}
+
+function render(){
+  $('#title').textContent=TABS.find(t=>t[0]===tab)[1].replace('Partic.','Particulares');
+  const l=visible();
+  $('#list').innerHTML=l.length?l.map(card).join(''):`<div class="empty">${query?'Nada encontrado para “'+esc(query)+'”':tab==='archivo'?'No hay partes archivados':'No hay partes aquí.<br>Pulsa + para añadir uno.'}</div>`;
+  const pend=jobs.filter(j=>!j.archivado&&!(j.checks||{}).cobro).length;
+  $('#tabs').innerHTML=TABS.map(([k,n,ic])=>`<button data-tab="${k}" class="${k===tab?'on':''}"><span class="ic">${ic}</span>${n}${k==='pendiente'&&pend?`<span class="badge">${pend}</span>`:''}</button>`).join('');
+  renderSync();
+}
+function card(j){
+  const tel=digits(j.telefono), addr=fullAddr(j), q=encodeURIComponent(addr+', España'), ch=j.checks||{};
+  const all=CHECKS.every(([k])=>ch[k]);
+  return `<article class="card ${j.compania}${all?' done':''}" data-id="${esc(j.id)}">
+  <div class="top">
+    <div class="arrows"><button data-act="up" aria-label="Subir">${ICON.up}</button><button data-act="down" aria-label="Bajar">${ICON.down}</button></div>
+    <div class="ttl">
+      <div class="addr" data-act="edit">${esc(addr||'(sin dirección)')}</div>
+      <div class="meta"><span class="num" data-act="edit">${esc(j.numero||'—')}</span><span class="ago">${ago(j.fecha)}</span></div>
+      ${j.asegurado||j.averia?`<div class="who"><span class="tag">${COMP[j.compania]||''}</span>${esc(j.asegurado||'')}</div>`:''}
+    </div>
+  </div>
+  <div class="grid">
+    ${tel?`<a class="btn call" href="tel:+34${tel}">${ICON.phone}${fmtTel(tel)}</a><a class="btn wa" href="https://wa.me/34${tel}" target="_blank" rel="noopener">WhatsApp</a>`:`<button class="btn call" data-act="edit">${ICON.phone}Añadir teléfono</button><span></span>`}
+    <a class="btn soft" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${ICON.pin}Maps</a>
+    <a class="btn soft" href="https://waze.com/ul?q=${q}&navigate=yes" target="_blank" rel="noopener">Waze</a>
+  </div>
+  <div class="checks">${CHECKS.map(([k,n])=>`<label><input type="checkbox" data-check="${k}" ${ch[k]?'checked':''}>${n}</label>`).join('')}</div>
+</article>`;
+}
+
+/* events on list */
+$('#list').addEventListener('click',e=>{
+  const c=e.target.closest('.card'); if(!c) return; const j=jobs.find(x=>x.id===c.dataset.id);
+  const act=e.target.closest('[data-act]')?.dataset.act;
+  if(act==='edit') openEdit(j);
+  if(act==='up'||act==='down') move(j,act);
+});
+$('#list').addEventListener('change',e=>{
+  const k=e.target.dataset.check; if(!k) return; const j=jobs.find(x=>x.id===e.target.closest('.card').dataset.id);
+  j.checks={...(j.checks||{}),[k]:e.target.checked}; j.mod=Date.now(); save();
+  if(k==='cobro'&&tab==='pendiente'&&e.target.checked){toast('Cobrado ✓');setTimeout(render,350)} else render();
+});
+function move(j,dir){
+  const l=visible(), i=l.indexOf(j), o=l[dir==='up'?i-1:i+1]; if(!o) return;
+  [j.orden,o.orden]=[o.orden,j.orden]; if(j.orden===o.orden) j.orden+=dir==='up'?1:-1; save(); render();
+}
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b){tab=b.dataset.tab;render();scrollTo(0,0)}});
+$('#bSearch').onclick=()=>{const s=$('#searchBar');s.classList.toggle('on');if(s.classList.contains('on'))$('#q').focus();else{$('#q').value='';query='';render()}};
+$('#q').oninput=e=>{query=e.target.value.trim();render()};
+
+/* sheet */
+function openSheet(html){$('#sheet').innerHTML='<div class="grab"></div>'+html;$('#veil').classList.add('on');$('#sheet').classList.add('on');$('#sheet').scrollTop=0}
+function closeSheet(){$('#veil').classList.remove('on');$('#sheet').classList.remove('on');editing=null}
+$('#veil').onclick=closeSheet;
+
+function openEdit(j){
+  const isNew=!j;
+  editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'Terrassa (Barcelona)',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},archivado:false};
+  editing._new=isNew;
+  const e=editing;
+  openSheet(`<h2>${isNew?'Nuevo parte':'Parte '+esc(e.numero)}</h2>
+  <div class="f"><label>Compañía</label><div class="seg" id="segComp">${Object.entries(COMP).map(([k,n])=>`<button type="button" data-c="${k}" class="${e.compania===k?'on':''}">${n}</button>`).join('')}</div></div>
+  <div class="row2"><div class="f"><label>Nº siniestro</label><input id="e_numero" inputmode="numeric" value="${esc(e.numero)}"></div>
+  <div class="f"><label>Teléfono</label><input id="e_telefono" type="tel" inputmode="tel" value="${esc(e.telefono)}"></div></div>
+  <div class="f"><label>Asegurado / cliente</label><input id="e_asegurado" value="${esc(e.asegurado)}"></div>
+  <div class="f"><label>Dirección</label><input id="e_direccion" value="${esc(e.direccion)}" placeholder="Calle, número, piso"></div>
+  <div class="f"><label>Población</label><input id="e_poblacion" value="${esc(e.poblacion)}"></div>
+  <div class="f"><label>Avería</label><textarea id="e_averia">${esc(e.averia)}</textarea></div>
+  <div class="f"><label>Condiciones</label><textarea id="e_condiciones">${esc(e.condiciones)}</textarea></div>
+  <div class="f"><label>Notas</label><textarea id="e_notas" placeholder="Material, horas, lo que hiciste…">${esc(e.notas)}</textarea></div>
+  <div class="f"><label>Fotos</label><div class="photos" id="photos"></div></div>
+  <div class="f"><label>Fecha de entrada</label><input id="e_fecha" type="datetime-local" value="${toLocalInput(e.fecha)}"></div>
+  <div class="actions sticky">
+    <button class="btn soft" id="eCancel">Cancelar</button>
+    <button class="btn primary" id="eSave">Guardar</button>
+  </div>
+  ${isNew?'':`<div class="actions">
+    <button class="btn soft" id="eArch">${e.archivado?'Sacar del archivo':'Archivar'}</button>
+    <button class="btn danger" id="eDel">Borrar</button></div>`}`);
+  renderPhotos();
+  $('#segComp').onclick=ev=>{const b=ev.target.closest('[data-c]');if(!b)return;e.compania=b.dataset.c;[...$('#segComp').children].forEach(x=>x.classList.toggle('on',x===b))};
+  $('#eCancel').onclick=closeSheet;
+  $('#eSave').onclick=()=>commit();
+  if(!isNew){
+    $('#eArch').onclick=()=>{e.archivado=!e.archivado;commit(e.archivado?'Archivado':'Recuperado')};
+    $('#eDel').onclick=()=>{if(confirm('¿Borrar este parte para siempre?')){jobs=jobs.filter(x=>x.id!==e.id);save();closeSheet();render();toast('Borrado')}};
+  }
+}
+function toLocalInput(iso){const d=new Date(iso);if(isNaN(d))return '';const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}
+function commit(msg){
+  const e=editing;
+  ['numero','telefono','asegurado','direccion','poblacion','averia','condiciones','notas'].forEach(k=>e[k]=$('#e_'+k).value.trim());
+  e.telefono=digits(e.telefono)||e.telefono;
+  const f=$('#e_fecha').value; if(f) e.fecha=new Date(f).toISOString();
+  e.mod=Date.now();
+  const isNew=e._new; delete e._new;
+  if(isNew){e.orden=Math.max(0,...jobs.map(j=>j.orden||0))+1;jobs.push(e)} else {const i=jobs.findIndex(x=>x.id===e.id);jobs[i]=e}
+  if(save()){closeSheet();render();toast(msg||'Guardado')}
+}
+function renderPhotos(){
+  const e=editing;
+  $('#photos').innerHTML=(e.fotos||[]).map((p,i)=>`<div class="ph"><img src="${p}" data-i="${i}"><button class="x" data-del="${i}">×</button></div>`).join('')+`<button class="addph" id="addPh" type="button"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>`;
+  $('#addPh').onclick=()=>$('#filePhoto').click();
+  $('#photos').onclick=ev=>{
+    const d=ev.target.dataset.del; if(d!==undefined){e.fotos.splice(+d,1);renderPhotos();return}
+    const i=ev.target.dataset.i; if(i!==undefined){$('#viewerImg').src=e.fotos[+i];$('#viewer').classList.add('on')}
+  };
+}
+$('#viewer').onclick=()=>$('#viewer').classList.remove('on');
+$('#filePhoto').onchange=async ev=>{
+  for(const file of ev.target.files){ try{ editing.fotos=[...(editing.fotos||[]),await shrink(file)] }catch(e){toast('No se pudo leer la foto')} }
+  ev.target.value=''; renderPhotos();
+};
+function shrink(file,max=1000,q=.62){return new Promise((ok,ko)=>{const img=new Image();img.onload=()=>{const r=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=img.width*r;c.height=img.height*r;c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(img.src);ok(c.toDataURL('image/jpeg',q))};img.onerror=ko;img.src=URL.createObjectURL(file)})}
+$('#bAdd').onclick=()=>openEdit(null);
+
+/* data menu: export/import/sync */
+$('#bData').onclick=()=>{
+  openSheet(`<h2>Copia de seguridad</h2><div class="menu">
+  <button class="btn soft" id="mExp">⬇️&nbsp; Exportar todo (archivo .json)</button>
+  <button class="btn soft" id="mImp">⬆️&nbsp; Importar copia (.json)</button>
+  <button class="btn soft" id="mSync">🔄&nbsp; Leer partes nuevos ahora</button></div>
+  <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
+  <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
+  <p class="hint">${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
+  $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
+  $('#mSync').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));sync(true)};
+  $('#mOk').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));closeSheet();if(cfg.url)sync()};
+};
+function exportJSON(){
+  const blob=new Blob([JSON.stringify({app:'cuaderno',version:1,exportado:new Date().toISOString(),partes:jobs},null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cuaderno-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();toast('Copia descargada');
+}
+$('#fileImport').onchange=async ev=>{
+  const f=ev.target.files[0]; ev.target.value=''; if(!f) return;
+  try{const d=JSON.parse(await f.text()); const list=Array.isArray(d)?d:d.partes; if(!Array.isArray(list)) throw 0;
+    const n=merge(list,true); save(); closeSheet(); render(); toast(`Importados: ${n.added} nuevos, ${n.updated} actualizados`);
+  }catch(e){toast('Ese archivo no es una copia válida')}
+};
+/* merge by numero (or id). overwrite=true replaces existing (import), false only adds new (sync) */
+function merge(list,overwrite){
+  let added=0,updated=0; let top=Math.max(0,...jobs.map(j=>j.orden||0));
+  list=[...list].filter(r=>r&&typeof r==='object').sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
+  for(const r of list){
+    const j=normalize(r);
+    const ex=jobs.find(x=>(j.numero&&x.numero===j.numero)||x.id===j.id);
+    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','telefono','direccion','poblacion','averia','condiciones']) if(!ex[k]&&j[k]) ex[k]=j[k]; } }
+    else { j.orden=++top; jobs.push(j); added++; }
+  }
+  return {added,updated};
+}
+function normalize(r){
+  let c=String(r.compania||r.company||'').toLowerCase();
+  c=c.includes('iris')?'iris':c.includes('luc')?'lucia':c?'particular':'particular';
+  return {id:r.id||('x-'+(r.numero||Date.now().toString(36))),numero:String(r.numero||r.siniestro||''),compania:c,direccion:r.direccion||'',poblacion:r.poblacion||'',
+    telefono:digits(r.telefono)||String(r.telefono||''),asegurado:r.asegurado||'',averia:r.averia||'',condiciones:r.condiciones||'',notas:r.notas||'',fotos:Array.isArray(r.fotos)?r.fotos:[],
+    fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},archivado:!!r.archivado,mod:r.mod||0};
+}
+async function sync(manual){
+  if(!cfg.url){ if(manual) toast('Pon primero la dirección de sincronización'); return; }
+  try{
+    $('#syncState').textContent='Leyendo correo…';
+    const res=await fetch(cfg.url,{cache:'no-store'}); if(!res.ok) throw new Error(res.status);
+    const d=await res.json(); const list=Array.isArray(d)?d:(d.partes||d.records||d.record||[]);
+    const n=merge(Array.isArray(list)?list:Object.values(list),false); save();
+    cfg.last=Date.now(); localStorage.setItem(CFG,JSON.stringify(cfg)); render();
+    if(n.added) toast(n.added===1?'1 siniestro nuevo':n.added+' siniestros nuevos'); else if(manual) toast('No hay siniestros nuevos');
+  }catch(e){ $('#syncState').textContent='Sin conexión con el correo'; if(manual) toast('No se pudo leer: '+e.message); }
+}
+function renderSync(){ $('#syncState').textContent=!cfg.url?'Sin lectura del correo':cfg.last?'Correo leído hace '+ago(new Date(cfg.last).toISOString()).replace('ahora','un momento'):'Correo pendiente de leer'; }
+
+/* install */
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+if(!standalone) $('#bInstall').hidden=false;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;if(!standalone)$('#bInstall').hidden=false});
+addEventListener('appinstalled',()=>{$('#bInstall').hidden=true;toast('Instalada en el escritorio')});
+async function install(){
+  if(deferredPrompt){deferredPrompt.prompt();const r=await deferredPrompt.userChoice;deferredPrompt=null;if(r.outcome==='accepted')$('#bInstall').hidden=true;return}
+  openSheet(`<h2>Poner en el escritorio</h2><p class="hint" style="font-size:15px">En Chrome (Android): pulsa los <b>tres puntos ⋮</b> arriba a la derecha y elige <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar aplicación”</b>.<br><br>En iPhone (Safari): pulsa <b>Compartir</b> y luego <b>“Añadir a pantalla de inicio”</b>.</p><div class="actions"><button class="btn primary" onclick="closeSheet()">Entendido</button></div>`);
+}
+$('#bInstall').onclick=install; $('#bInstall2').onclick=install;
+
+if('serviceWorker' in navigator && location.protocol!=='file:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+firstRun().then(()=>sync());
+setInterval(()=>{render()},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){sync();render()}});
+</script>
+</body>
+</html>
