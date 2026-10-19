@@ -40,6 +40,11 @@ main{padding:12px 10px 170px}
 .card.iris{background:var(--card-iris);border-left-color:#1E5A78}
 .card.particular{background:var(--card-part);border-left-color:#8A6A2E}
 .card.done{opacity:.8}
+.card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.card.lift{position:fixed;z-index:30;margin:0;pointer-events:none;transform:scale(1.03);box-shadow:0 14px 30px rgba(40,25,15,.32);transition:transform .12s,box-shadow .12s}
+.card.pressing{transform:scale(.985);transition:transform .35s}
+.ph-drag{border:2px dashed #BFB2A4;border-radius:14px;margin-bottom:12px;background:rgba(255,253,249,.45)}
+body.dragging{touch-action:none}
 .top{display:flex;gap:6px}
 .arrows{display:flex;flex-direction:column;align-items:center;gap:4px;color:#8F7F78;margin:-4px 0 0 -4px}
 .arrows button{width:46px;height:46px;display:grid;place-items:center;border-radius:12px;background:rgba(43,30,26,.05)}
@@ -226,9 +231,17 @@ function chips(j){const m=String(j.modalidad||'').trim(), p=String(j.proveedor||
 
 let jobs=load(), cfg=JSON.parse(localStorage.getItem(CFG)||'{}'), tab='notas', query='', editing=null, deferredPrompt=null;
 
-const cleanPob=p=>String(p??'').replace(/\s*\([^)]*\)\s*$/,'').trim();
+function cleanPob(p){return String(p??'').replace(/\s*\([^)]*\)\s*$/,'').trim()} /* declaración (no const): load() la usa antes de esta línea */
 function load(){
-  try{const d=JSON.parse(localStorage.getItem(KEY)); if(Array.isArray(d)){ d.forEach(j=>{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); }); return d; }}catch(e){}
+  const raw=localStorage.getItem(KEY); let d;
+  try{ d=JSON.parse(raw) }catch(e){ d=null }
+  if(Array.isArray(d)){
+    /* migraciones: un fallo aquí nunca debe vaciar la lista */
+    d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); }catch(e){} });
+    return d;
+  }
+  /* datos ilegibles: se guarda una copia de rescate antes de que nada los sobrescriba */
+  if(raw){ try{ localStorage.setItem(KEY+'.rescate-'+Date.now(),raw) }catch(e){} }
   return [];
 }
 async function firstRun(){
@@ -347,6 +360,7 @@ function visible(){
 }
 
 function render(){
+  if(drag){drag.rerender=true;return}
   $('#title').textContent=TABS.find(t=>t[0]===tab)[1].replace('Partic.','Particulares');
   const l=visible();
   $('#list').innerHTML=l.length?l.map(card).join(''):`<div class="empty">${query?'Nada encontrado para “'+esc(query)+'”':tab==='archivo'?'No hay partes archivados':'No hay partes aquí.<br>Pulsa + para añadir uno.'}</div>`;
@@ -391,6 +405,70 @@ $('#list').addEventListener('change',e=>{
   j.checks={...(j.checks||{}),[k]:e.target.checked}; j.mod=Date.now(); save();
   if(k==='cita'&&tab==='pendiente'&&e.target.checked){toast('Cita marcada ✓');setTimeout(render,350)} else render();
 });
+/* reordenar con pulsación larga y arrastre (Pointer Events). Solo entre los partes visibles en la pestaña actual. */
+let drag=null, press=null, noClick=false;
+const NOLIFT='input,label,button,a,select,textarea,.checks,.arrows,.grid';
+$('#list').addEventListener('pointerdown',e=>{
+  if(drag||press||query||(e.pointerType==='mouse'&&e.button!==0)) return;
+  const c=e.target.closest('.card'); if(!c||e.target.closest(NOLIFT)) return;
+  press={c,id:e.pointerId,x:e.clientX,y:e.clientY,t:setTimeout(()=>lift(e.clientX,e.clientY),400)};
+  c.classList.add('pressing');
+});
+function endPress(){ if(!press) return; clearTimeout(press.t); press.c.classList.remove('pressing'); press=null; }
+function lift(x,y){
+  const {c,id}=press; press=null; c.classList.remove('pressing');
+  const r=c.getBoundingClientRect(), ph=document.createElement('div');
+  ph.className='ph-drag'; ph.style.height=r.height+'px'; c.after(ph);
+  c.style.left=r.left+'px'; c.style.top=r.top+'px'; c.style.width=r.width+'px'; c.classList.add('lift');
+  document.body.classList.add('dragging');
+  drag={c,ph,id,dy:y-r.top,x,y,raf:0};
+  try{ $('#list').setPointerCapture(id) }catch(_){}
+  if(navigator.vibrate) navigator.vibrate(25);
+  drag.raf=requestAnimationFrame(autoScroll);
+}
+function placeAt(y){
+  if(!drag) return; drag.c.style.top=(y-drag.dy)+'px';
+  const others=[...$('#list').querySelectorAll('.card:not(.lift)')];
+  const cy=y-drag.dy+drag.ph.offsetHeight/2; /* centro de la tarjeta levantada */
+  const before=others.find(o=>{const r=o.getBoundingClientRect();return cy<r.top+r.height/2});
+  if(before){ if(drag.ph.nextElementSibling!==before) before.before(drag.ph) } else if(others.length&&$('#list').lastElementChild!==drag.ph) $('#list').append(drag.ph);
+}
+function autoScroll(){
+  if(!drag) return;
+  const top=$('header').getBoundingClientRect().bottom+50, bot=$('nav').getBoundingClientRect().top-50, y=drag.y;
+  const v=y<top?-Math.min(22,(top-y)/3+4):y>bot?Math.min(22,(y-bot)/3+4):0;
+  if(v){ const b=scrollY; scrollBy(0,v); if(scrollY!==b) placeAt(y) }
+  drag.raf=requestAnimationFrame(autoScroll);
+}
+$('#list').addEventListener('pointermove',e=>{
+  if(press&&e.pointerId===press.id&&Math.hypot(e.clientX-press.x,e.clientY-press.y)>10) endPress();
+  if(drag&&e.pointerId===drag.id){ e.preventDefault(); drag.y=e.clientY; placeAt(e.clientY) }
+});
+function drop(ok){
+  const d=drag; if(!d) return; drag=null; cancelAnimationFrame(d.raf);
+  document.body.classList.remove('dragging');
+  try{ $('#list').releasePointerCapture(d.id) }catch(_){}
+  noClick=true;
+  if(ok){
+    const ids=[...$('#list').children].map(el=>el===d.ph?d.c.dataset.id:el.classList.contains('lift')?null:el.dataset.id).filter(Boolean);
+    const l=ids.map(id=>jobs.find(j=>j.id===id)).filter(Boolean);
+    const vals=l.map(j=>j.orden||0).sort((a,b)=>b-a);
+    for(let i=1;i<vals.length;i++) if(vals[i]>=vals[i-1]) vals[i]=vals[i-1]-1;
+    const changed=l.some((j,i)=>(j.orden||0)!==vals[i]);
+    l.forEach((j,i)=>j.orden=vals[i]);
+    if(changed) save();
+  }
+  render();
+}
+$('#list').addEventListener('pointerup',e=>{ if(press&&e.pointerId===press.id) endPress(); if(drag&&e.pointerId===drag.id) drop(true) });
+$('#list').addEventListener('pointercancel',e=>{ if(press&&e.pointerId===press.id) endPress(); if(drag&&e.pointerId===drag.id) drop(false) });
+$('#list').addEventListener('lostpointercapture',e=>{ if(drag&&e.pointerId===drag.id) drop(true) });
+/* mientras se arrastra, el dedo no desplaza la página (Chrome Android) */
+document.addEventListener('touchmove',e=>{ if(drag||press) { if(drag) e.preventDefault() } },{passive:false});
+document.addEventListener('contextmenu',e=>{ if((press||drag)&&e.target.closest('#list')) e.preventDefault() });
+/* tras soltar, el "click" que genera el navegador no abre el parte */
+document.addEventListener('pointerdown',()=>{ noClick=false },true);
+document.addEventListener('click',e=>{ if(noClick){ noClick=false; if(e.target.closest('#list')){ e.stopPropagation(); e.preventDefault() } } },true);
 function move(j,dir){
   const l=visible(), i=l.indexOf(j), o=l[dir==='up'?i-1:i+1]; if(!o) return;
   [j.orden,o.orden]=[o.orden,j.orden]; if(j.orden===o.orden) j.orden+=dir==='up'?1:-1; save(); render();
