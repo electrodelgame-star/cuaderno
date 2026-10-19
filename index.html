@@ -41,10 +41,14 @@ main{padding:12px 10px 170px}
 .card.particular{background:var(--card-part);border-left-color:#8A6A2E}
 .card.done{opacity:.8}
 .card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-.card.lift{position:fixed;z-index:30;margin:0;pointer-events:none;transform:scale(1.03);box-shadow:0 14px 30px rgba(40,25,15,.32);transition:transform .12s,box-shadow .12s}
+.card.lift{position:fixed;z-index:30;margin:0;pointer-events:none;transform:scale(1.04) rotate(-.6deg);box-shadow:0 18px 38px rgba(40,25,15,.38);transition:transform .12s,box-shadow .12s;opacity:.97;will-change:top}
+.grip{flex:none;width:42px;height:46px;margin:-4px -6px 0 0;display:grid;place-items:center;border-radius:12px;color:#8F7F78;background:rgba(43,30,26,.05);touch-action:none;-webkit-tap-highlight-color:transparent;cursor:grab}
+.grip svg{width:26px;height:26px;stroke-width:2.6}
+.grip:active,.card.lift .grip{background:rgba(43,30,26,.16)}
 .card.pressing{transform:scale(.985);transition:transform .35s}
 .ph-drag{border:2px dashed #BFB2A4;border-radius:14px;margin-bottom:12px;background:rgba(255,253,249,.45)}
-body.dragging{touch-action:none}
+body.dragging{touch-action:none;overscroll-behavior:none;cursor:grabbing}
+.card a,.card img{-webkit-user-drag:none}
 .top{display:flex;gap:6px}
 .arrows{display:flex;flex-direction:column;align-items:center;gap:4px;color:#8F7F78;margin:-4px 0 0 -4px}
 .arrows button{width:46px;height:46px;display:grid;place-items:center;border-radius:12px;background:rgba(43,30,26,.05)}
@@ -195,6 +199,7 @@ const BK='cuaderno.backup.', RESC=KEY+'.rescate-', BK_DAYS=7, RESC_MAX=6; /* arr
 const ICON={
  phone:'<svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
  pin:'<svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+ grip:'<svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>',
  up:'<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>', down:'<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
  notas:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
  iris:'<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6z"/></svg>',
@@ -441,7 +446,7 @@ function visible(){
 }
 
 function render(){
-  if(drag){drag.rerender=true;return}
+  if(drag||press){ clearTimeout(render.t); render.t=setTimeout(render,400); return } /* no rehacer la lista bajo el dedo */
   $('#title').textContent=TABS.find(t=>t[0]===tab)[1].replace('Partic.','Particulares');
   const l=visible();
   $('#list').innerHTML=l.length?l.map(card).join(''):`<div class="empty">${query?'Nada encontrado para “'+esc(query)+'”':tab==='archivo'?'No hay partes archivados':'No hay partes aquí.<br>Pulsa + para añadir uno.'}</div>`;
@@ -462,6 +467,7 @@ function card(j){
       ${j.asegurado||j.averia?`<div class="who"><span class="tag">${COMP[j.compania]||''}</span>${esc(j.asegurado||'')}</div>`:''}
       ${(()=>{const t=totales(j.importes);return t.base>0?`<div class="imp-card" data-act="edit">Importe: ${eur(t.total)} IVA incl.</div>`:''})()}
     </div>
+    <div class="grip" data-grip="1" role="button" aria-label="Arrastrar para ordenar">${ICON.grip}</div>
   </div>
   <div class="grid">
     ${tel?`<a class="btn call" href="tel:+34${tel}">${ICON.phone}${fmtTel(tel)}</a><a class="btn wa" href="https://wa.me/34${tel}" target="_blank" rel="noopener">WhatsApp</a>`:`<button class="btn call" data-act="edit">${ICON.phone}Añadir teléfono</button><span></span>`}
@@ -486,25 +492,29 @@ $('#list').addEventListener('change',e=>{
   j.checks={...(j.checks||{}),[k]:e.target.checked}; j.mod=Date.now(); save();
   if(k==='cita'&&tab==='pendiente'&&e.target.checked){toast('Cita marcada ✓');setTimeout(render,350)} else render();
 });
-/* reordenar con pulsación larga y arrastre (Pointer Events). Solo entre los partes visibles en la pestaña actual. */
-let drag=null, press=null, noClick=false;
-const NOLIFT='input,label,button,a,select,textarea,.checks,.arrows,.grid';
-$('#list').addEventListener('pointerdown',e=>{
-  if(drag||press||query||(e.pointerType==='mouse'&&e.button!==0)) return;
-  const c=e.target.closest('.card'); if(!c||e.target.closest(NOLIFT)) return;
-  press={c,id:e.pointerId,x:e.clientX,y:e.clientY,t:setTimeout(()=>lift(e.clientX,e.clientY),400)};
+/* v16 · reordenar: asa ≡ (arrastra al instante) o pulsación larga de 400 ms en la tarjeta (tolerancia 10 px).
+   Antes (v13–v15) se usaba setPointerCapture: en Chrome Android el toque ya está capturado de forma implícita por el
+   elemento tocado, al cambiar la captura saltaba «lostpointercapture» y el arrastre se cancelaba nada más empezar.
+   Ahora: eventos táctiles (touchmove no pasivo con preventDefault una vez levantada) y Pointer Events solo para ratón. */
+const HOLD_MS=400, SLOP=10;
+let drag=null, press=null, noClick=0;
+const NOLIFT='input,label,button,a,select,textarea,.checks,.arrows';
+function startPress(c,x,y,src,instant){
+  press={c,x,y,src,t:0};
+  if(instant){ lift(x,y); return }
   c.classList.add('pressing');
-});
+  press.t=setTimeout(()=>{ if(press&&press.c===c) lift(press.x,press.y) },HOLD_MS);
+}
 function endPress(){ if(!press) return; clearTimeout(press.t); press.c.classList.remove('pressing'); press=null; }
 function lift(x,y){
-  const {c,id}=press; press=null; c.classList.remove('pressing');
+  const c=press.c, src=press.src; press=null; c.classList.remove('pressing');
+  if(!c.isConnected||query) return;
   const r=c.getBoundingClientRect(), ph=document.createElement('div');
   ph.className='ph-drag'; ph.style.height=r.height+'px'; c.after(ph);
   c.style.left=r.left+'px'; c.style.top=r.top+'px'; c.style.width=r.width+'px'; c.classList.add('lift');
   document.body.classList.add('dragging');
-  drag={c,ph,id,dy:y-r.top,x,y,raf:0};
-  try{ $('#list').setPointerCapture(id) }catch(_){}
-  if(navigator.vibrate) navigator.vibrate(25);
+  drag={c,ph,src,dy:y-r.top,y,raf:0,moved:false};
+  try{ if(navigator.vibrate) navigator.vibrate(30) }catch(_){}
   drag.raf=requestAnimationFrame(autoScroll);
 }
 function placeAt(y){
@@ -516,20 +526,15 @@ function placeAt(y){
 }
 function autoScroll(){
   if(!drag) return;
-  const top=$('header').getBoundingClientRect().bottom+50, bot=$('nav').getBoundingClientRect().top-50, y=drag.y;
-  const v=y<top?-Math.min(22,(top-y)/3+4):y>bot?Math.min(22,(y-bot)/3+4):0;
+  const top=$('header').getBoundingClientRect().bottom+60, bot=$('nav').getBoundingClientRect().top-60, y=drag.y;
+  const v=y<top?-Math.min(24,(top-y)/3+4):y>bot?Math.min(24,(y-bot)/3+4):0;
   if(v){ const b=scrollY; scrollBy(0,v); if(scrollY!==b) placeAt(y) }
   drag.raf=requestAnimationFrame(autoScroll);
 }
-$('#list').addEventListener('pointermove',e=>{
-  if(press&&e.pointerId===press.id&&Math.hypot(e.clientX-press.x,e.clientY-press.y)>10) endPress();
-  if(drag&&e.pointerId===drag.id){ e.preventDefault(); drag.y=e.clientY; placeAt(e.clientY) }
-});
 function drop(ok){
   const d=drag; if(!d) return; drag=null; cancelAnimationFrame(d.raf);
   document.body.classList.remove('dragging');
-  try{ $('#list').releasePointerCapture(d.id) }catch(_){}
-  noClick=true;
+  noClick=Date.now();
   if(ok){
     const ids=[...$('#list').children].map(el=>el===d.ph?d.c.dataset.id:el.classList.contains('lift')?null:el.dataset.id).filter(Boolean);
     const l=ids.map(id=>jobs.find(j=>j.id===id)).filter(Boolean);
@@ -541,15 +546,47 @@ function drop(ok){
   }
   render();
 }
-$('#list').addEventListener('pointerup',e=>{ if(press&&e.pointerId===press.id) endPress(); if(drag&&e.pointerId===drag.id) drop(true) });
-$('#list').addEventListener('pointercancel',e=>{ if(press&&e.pointerId===press.id) endPress(); if(drag&&e.pointerId===drag.id) drop(false) });
-$('#list').addEventListener('lostpointercapture',e=>{ if(drag&&e.pointerId===drag.id) drop(true) });
-/* mientras se arrastra, el dedo no desplaza la página (Chrome Android) */
-document.addEventListener('touchmove',e=>{ if(drag||press) { if(drag) e.preventDefault() } },{passive:false});
-document.addEventListener('contextmenu',e=>{ if((press||drag)&&e.target.closest('#list')) e.preventDefault() });
-/* tras soltar, el "click" que genera el navegador no abre el parte */
-document.addEventListener('pointerdown',()=>{ noClick=false },true);
-document.addEventListener('click',e=>{ if(noClick){ noClick=false; if(e.target.closest('#list')){ e.stopPropagation(); e.preventDefault() } } },true);
+/* táctil */
+$('#list').addEventListener('touchstart',e=>{
+  noClick=0;
+  if(e.touches.length>1){ endPress(); if(drag) drop(true); return }
+  if(drag||press) return;
+  const t=e.touches[0], c=e.target.closest('.card'); if(!c) return;
+  const g=e.target.closest('[data-grip]');
+  if(g){ e.preventDefault(); if(query){ toast('Borra la búsqueda para ordenar'); return } startPress(c,t.clientX,t.clientY,'touch',true); return }
+  if(query||e.target.closest(NOLIFT)) return;
+  startPress(c,t.clientX,t.clientY,'touch',false);
+},{passive:false});
+document.addEventListener('touchmove',e=>{
+  const t=e.touches[0]; if(!t) return;
+  if(press&&press.src==='touch'){ if(Math.hypot(t.clientX-press.x,t.clientY-press.y)>SLOP) endPress(); }
+  if(drag&&drag.src==='touch'){ e.preventDefault(); drag.y=t.clientY; drag.moved=true; placeAt(t.clientY) }
+},{passive:false});
+document.addEventListener('touchend',e=>{
+  if(press&&press.src==='touch') endPress();
+  if(drag&&drag.src==='touch'&&!e.touches.length){ if(e.cancelable) e.preventDefault(); drop(true) }
+},{passive:false});
+document.addEventListener('touchcancel',()=>{ if(press&&press.src==='touch') endPress(); if(drag&&drag.src==='touch') drop(drag.moved) });
+/* ratón (ordenador) */
+$('#list').addEventListener('pointerdown',e=>{
+  if(e.pointerType!=='mouse'||e.button!==0||drag||press||query) return;
+  const c=e.target.closest('.card'); if(!c) return; const g=e.target.closest('[data-grip]');
+  if(!g&&e.target.closest(NOLIFT)) return;
+  if(g) e.preventDefault();
+  startPress(c,e.clientX,e.clientY,'mouse',!!g);
+});
+document.addEventListener('pointermove',e=>{
+  if(e.pointerType!=='mouse') return;
+  if(press&&press.src==='mouse'&&Math.hypot(e.clientX-press.x,e.clientY-press.y)>SLOP) endPress();
+  if(drag&&drag.src==='mouse'){ e.preventDefault(); drag.y=e.clientY; drag.moved=true; placeAt(e.clientY) }
+});
+document.addEventListener('pointerup',e=>{ if(e.pointerType!=='mouse') return; if(press&&press.src==='mouse') endPress(); if(drag&&drag.src==='mouse') drop(true) });
+/* sin menú contextual, selección ni «arrastrar enlace» del sistema durante la pulsación */
+document.addEventListener('contextmenu',e=>{ if(press||drag||e.target.closest('#list .card')) e.preventDefault() }); /* tampoco el menú de enlace de Chrome en Llamar/Maps/Waze */
+document.addEventListener('selectstart',e=>{ if(press||drag) e.preventDefault() });
+document.addEventListener('dragstart',e=>{ if(press||drag||e.target.closest?.('#list .card')) e.preventDefault() });
+/* tras soltar, el "click" que pueda generar el navegador no abre el parte */
+document.addEventListener('click',e=>{ if(noClick&&Date.now()-noClick<700&&e.target.closest('#list')){ e.stopPropagation(); e.preventDefault() } noClick=0 },true);
 function move(j,dir){
   const l=visible(), i=l.indexOf(j), o=l[dir==='up'?i-1:i+1]; if(!o) return;
   [j.orden,o.orden]=[o.orden,j.orden]; if(j.orden===o.orden) j.orden+=dir==='up'?1:-1; save(); render();
@@ -724,7 +761,7 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v16 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
