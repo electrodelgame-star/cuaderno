@@ -364,7 +364,7 @@ function card(j){
       <div class="meta"><span class="num" data-act="edit">${esc(j.numero||'—')}</span><span class="ago">${ago(j.fecha)}</span></div>
       ${chips(j)}
       ${j.asegurado||j.averia?`<div class="who"><span class="tag">${COMP[j.compania]||''}</span>${esc(j.asegurado||'')}</div>`:''}
-      ${(()=>{const t=totales(j.importes);return t.base>0?`<div class="imp-card" data-act="edit">Importe: ${eur(t.base)} + IVA</div>`:''})()}
+      ${(()=>{const t=totales(j.importes);return t.base>0?`<div class="imp-card" data-act="edit">Importe: ${eur(t.total)} IVA incl.</div>`:''})()}
     </div>
   </div>
   <div class="grid">
