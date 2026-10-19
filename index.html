@@ -63,6 +63,18 @@ main{padding:12px 10px}
 .checks input{appearance:none;-webkit-appearance:none;width:26px;height:26px;border:1.5px solid #B9A9A3;border-radius:7px;background:#F6EEEC;display:grid;place-items:center;margin:0}
 .checks input:checked{background:var(--teal);border-color:var(--teal)}
 .checks input:checked::after{content:"";width:7px;height:13px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.visita{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px;border-radius:10px;padding:9px 12px;min-height:44px;background:rgba(255,253,249,.65);border:1.5px dashed #C9B9B2;text-align:left}
+.visita svg{width:20px;height:20px;flex:none;color:var(--muted)}
+.visita .vl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);display:block}
+.visita .vv{font-size:15.5px;font-weight:700;color:var(--brown)}
+.visita.set{border:1.5px solid var(--teal);background:#E2F0EC}
+.visita.set svg{color:var(--teal)}
+.visita.hoy{background:var(--teal);border-color:var(--teal)}
+.visita.hoy .vl,.visita.hoy .vv,.visita.hoy svg{color:#fff}
+.visita.pasada.set{border-color:#B9A9A3;background:rgba(255,253,249,.5)}
+.visita.pasada svg{color:var(--muted)}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.quick button{border:1.5px solid #E0D6CA;border-radius:20px;padding:7px 12px;font-size:14px;font-weight:600;background:#FBF7F1}
 .empty{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}
 .fab{position:fixed;right:20px;bottom:calc(98px + env(safe-area-inset-bottom));width:66px;height:66px;border-radius:20px;background:var(--teal);color:#fff;display:grid;place-items:center;box-shadow:0 6px 16px rgba(14,110,100,.35);z-index:15}
 .fab svg{width:30px;height:30px;stroke-width:2.2}
@@ -147,6 +159,7 @@ const ICON={
  lucia:'<svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="1.5"/><path d="M9 7h6M9 11h6M9 15h6M3 21h18"/></svg>',
  part:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
  pend:'<svg viewBox="0 0 24 24"><path d="M4 6l2 2 3-3M4 14l2 2 3-3M12 7h8M12 15h8M12 19h6"/></svg>',
+ clock:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 13.5v3l2 1.2"/></svg>',
  arch:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>',
 };
 const TABS=[['notas','Notas',ICON.notas],['iris','Iris',ICON.iris],['lucia','Lucía',ICON.lucia],['particular','Partic.',ICON.part],['pendiente','Pendiente',ICON.pend],['archivo','Archivo',ICON.arch]];
@@ -181,6 +194,15 @@ function ago(iso){
   const h=Math.floor(m/60); if(h<24) return h+(h===1?' hora':' horas');
   const d=Math.floor(h/24); if(d<30) return d+(d===1?' día':' días');
   return new Date(iso).toLocaleDateString('es-ES');
+}
+/* hora de visita: se guarda en j.visita como ISO (UTC); vacío = sin cita */
+function fmtVisita(iso){
+  const d=new Date(iso); if(!iso||isNaN(d)) return null;
+  const t=d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  const day=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime();
+  const diff=Math.round((day(d)-day(new Date()))/864e5);
+  const dia=diff===0?'Hoy':diff===1?'Mañana':diff===-1?'Ayer':d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'}).replace(/^./,c=>c.toUpperCase());
+  return {txt:dia+' · '+t, hoy:diff===0&&d>=Date.now()-3*3600e3, pasada:d<Date.now()-3*3600e3};
 }
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('on'),2600)}
 
@@ -221,6 +243,7 @@ function card(j){
     <a class="btn soft" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${ICON.pin}Maps</a>
     <a class="btn soft" href="https://waze.com/ul?q=${q}&navigate=yes" target="_blank" rel="noopener">Waze</a>
   </div>
+  ${(()=>{const v=fmtVisita(j.visita);return `<button class="visita${v?' set':''}${v&&v.hoy?' hoy':''}${v&&v.pasada?' pasada':''}" data-act="visita">${ICON.clock}<span><span class="vl">Hora de visita</span><span class="vv">${v?esc(v.txt):'Poner hora de visita'}</span></span></button>`})()}
   <div class="checks">${CHECKS.map(([k,n])=>`<label><input type="checkbox" data-check="${k}" ${ch[k]?'checked':''}>${n}</label>`).join('')}</div>
 </article>`;
 }
@@ -231,6 +254,7 @@ $('#list').addEventListener('click',e=>{
   const act=e.target.closest('[data-act]')?.dataset.act;
   if(act==='edit') openEdit(j);
   if(act==='up'||act==='down') move(j,act);
+  if(act==='visita') openVisita(j);
 });
 $('#list').addEventListener('change',e=>{
   const k=e.target.dataset.check; if(!k) return; const j=jobs.find(x=>x.id===e.target.closest('.card').dataset.id);
@@ -250,9 +274,37 @@ function openSheet(html){$('#sheet').innerHTML='<div class="grab"></div>'+html;$
 function closeSheet(){$('#veil').classList.remove('on');$('#sheet').classList.remove('on');editing=null}
 $('#veil').onclick=closeSheet;
 
+function openVisita(j){
+  const p=n=>String(n).padStart(2,'0'), local=d=>`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  const base=j.visita&&!isNaN(new Date(j.visita))?new Date(j.visita):null;
+  const hoy=new Date(), man=new Date(Date.now()+864e5);
+  openSheet(`<h2>Hora de visita</h2>
+  <p class="hint" style="margin-top:-6px">${esc(fullAddr(j)||'(sin dirección)')}${j.asegurado?' · '+esc(j.asegurado):''}</p>
+  <div class="row2"><div class="f"><label>Día</label><input id="v_dia" type="date" value="${base?local(base):''}"></div>
+  <div class="f"><label>Hora</label><input id="v_hora" type="time" step="300" value="${base?p(base.getHours())+':'+p(base.getMinutes()):''}"></div></div>
+  <div class="quick" id="vQuick"><button type="button" data-d="${local(hoy)}">Hoy</button><button type="button" data-d="${local(man)}">Mañana</button>
+  ${['09:00','10:00','12:00','16:00','18:00'].map(h=>`<button type="button" data-h="${h}">${h}</button>`).join('')}</div>
+  <div class="actions">
+    ${base?'<button class="btn danger" id="vDel">Quitar</button>':'<button class="btn soft" id="vCancel">Cancelar</button>'}
+    <button class="btn primary" id="vOk">Guardar</button>
+  </div>`);
+  $('#vQuick').onclick=ev=>{const b=ev.target.closest('button');if(!b)return;if(b.dataset.d)$('#v_dia').value=b.dataset.d;if(b.dataset.h){$('#v_hora').value=b.dataset.h;if(!$('#v_dia').value)$('#v_dia').value=local(hoy)}};
+  if($('#vCancel')) $('#vCancel').onclick=closeSheet;
+  if($('#vDel')) $('#vDel').onclick=()=>setVisita(j,'');
+  $('#vOk').onclick=()=>{
+    const d=$('#v_dia').value, h=$('#v_hora').value;
+    if(!d){toast('Elige el día de la visita');return}
+    const dt=new Date(d+'T'+(h||'09:00')); if(isNaN(dt)){toast('Fecha no válida');return}
+    setVisita(j,dt.toISOString());
+  };
+}
+function setVisita(j,iso){
+  j.visita=iso; if(iso) j.checks={...(j.checks||{}),cita:true};
+  j.mod=Date.now(); if(save()){closeSheet();render();toast(iso?'Visita: '+fmtVisita(iso).txt:'Hora de visita quitada')}
+}
 function openEdit(j){
   const isNew=!j;
-  editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'Terrassa (Barcelona)',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},archivado:false};
+  editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'Terrassa (Barcelona)',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},visita:'',archivado:false};
   editing._new=isNew;
   const e=editing;
   openSheet(`<h2>${isNew?'Nuevo parte':'Parte '+esc(e.numero)}</h2>
@@ -262,6 +314,7 @@ function openEdit(j){
   <div class="f"><label>Asegurado / cliente</label><input id="e_asegurado" value="${esc(e.asegurado)}"></div>
   <div class="f"><label>Dirección</label><input id="e_direccion" value="${esc(e.direccion)}" placeholder="Calle, número, piso"></div>
   <div class="f"><label>Población</label><input id="e_poblacion" value="${esc(e.poblacion)}"></div>
+  <div class="f"><label>Hora de visita</label><input id="e_visita" type="datetime-local" value="${e.visita?toLocalInput(e.visita):''}"></div>
   <div class="f"><label>Avería</label><textarea id="e_averia">${esc(e.averia)}</textarea></div>
   <div class="f"><label>Condiciones</label><textarea id="e_condiciones">${esc(e.condiciones)}</textarea></div>
   <div class="f"><label>Notas</label><textarea id="e_notas" placeholder="Material, horas, lo que hiciste…">${esc(e.notas)}</textarea></div>
@@ -289,6 +342,7 @@ function commit(msg){
   ['numero','telefono','asegurado','direccion','poblacion','averia','condiciones','notas'].forEach(k=>e[k]=$('#e_'+k).value.trim());
   e.telefono=digits(e.telefono)||e.telefono;
   const f=$('#e_fecha').value; if(f) e.fecha=new Date(f).toISOString();
+  const v=$('#e_visita').value; e.visita=v&&!isNaN(new Date(v))?new Date(v).toISOString():''; if(e.visita) e.checks={...(e.checks||{}),cita:true};
   e.mod=Date.now();
   const isNew=e._new; delete e._new;
   if(isNew){e.orden=Math.max(0,...jobs.map(j=>j.orden||0))+1;jobs.push(e)} else {const i=jobs.findIndex(x=>x.id===e.id);jobs[i]=e}
@@ -342,7 +396,7 @@ function merge(list,overwrite){
   for(const r of list){
     const j=normalize(r);
     const ex=jobs.find(x=>(j.numero&&x.numero===j.numero)||x.id===j.id);
-    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','telefono','direccion','poblacion','averia','condiciones']) if(!ex[k]&&j[k]) ex[k]=j[k]; } }
+    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','telefono','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; } }
     else { j.orden=++top; jobs.push(j); added++; }
   }
   return {added,updated};
@@ -352,8 +406,9 @@ function normalize(r){
   c=c.includes('iris')?'iris':c.includes('luc')?'lucia':c?'particular':'particular';
   return {id:r.id||('x-'+(r.numero||Date.now().toString(36))),numero:String(r.numero||r.siniestro||''),compania:c,direccion:r.direccion||'',poblacion:r.poblacion||'',
     telefono:digits(r.telefono)||String(r.telefono||''),asegurado:r.asegurado||'',averia:r.averia||'',condiciones:r.condiciones||'',notas:r.notas||'',fotos:Array.isArray(r.fotos)?r.fotos:[],
-    fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},archivado:!!r.archivado,mod:r.mod||0};
+    fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},visita:normVisita(r.visita||r.horaVisita||r.hora_visita),archivado:!!r.archivado,mod:r.mod||0};
 }
+function normVisita(v){ if(!v) return ''; const d=new Date(v); return isNaN(d)?'':d.toISOString(); }
 async function sync(manual){
   if(!cfg.url){ if(manual) toast('Pon primero la dirección de sincronización'); return; }
   try{
