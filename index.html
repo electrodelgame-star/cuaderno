@@ -62,6 +62,11 @@ body.dragging{touch-action:none;overscroll-behavior:none;cursor:grabbing}
 .who{font-size:13px;color:var(--brown-2);margin-top:2px}
 .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(43,30,26,.08);margin-right:6px;text-transform:uppercase;letter-spacing:.4px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.btn.compact{font-size:14px;padding:9px 6px;min-height:42px;gap:6px;white-space:nowrap}
+.btn.compact svg{width:16px;height:16px}
+.telrow{display:flex;gap:6px;margin-bottom:6px}.telrow input{flex:1}
+.telrow .x{flex:none;width:44px;border-radius:11px;background:rgba(43,30,26,.07);font-size:20px;color:var(--brown-2)}
+#telAdd{width:100%;min-height:42px;font-size:15px}
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;border-radius:10px;padding:11px 8px;font-size:15px;font-weight:600;text-decoration:none;color:inherit;min-height:44px}
 .btn svg{width:18px;height:18px}
 .call{background:var(--brown);color:#fff}
@@ -195,6 +200,7 @@ nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line)
 <script>
 'use strict';
 const KEY='cuaderno.v1', CFG='cuaderno.cfg', CODES='cuaderno.codigos', DEAD='cuaderno.borrados', TOMB='cuaderno.borradosIds';
+const MAXTEL=4; /* v19: teléfonos por parte (arriba: load() lo usa) */
 const BK='cuaderno.backup.', RESC=KEY+'.rescate-', BK_DAYS=7, RESC_MAX=6; /* arriba del todo: load() los usa al arrancar */
 const ICON={
  phone:'<svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
@@ -251,7 +257,7 @@ function load(){
 /* migraciones: un fallo aquí nunca debe vaciar la lista */
 function migrate(d){
   d=d.filter(j=>j&&typeof j==='object');
-  d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor&&/^(caixa ?bank|segur ?caixa)$/.test(fold(j.proveedor))) j.proveedor='SegurCaixa'; if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); if(!Array.isArray(j.fotos)) j.fotos=[]; }catch(e){} });
+  d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor&&/^(caixa ?bank|segur ?caixa)$/.test(fold(j.proveedor))) j.proveedor='SegurCaixa'; if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); if(!Array.isArray(j.fotos)) j.fotos=[]; if(!Array.isArray(j.telefonos)||/[\/,;]|\d{18}/.test(String(j.telefono||''))) setTels(j,telsOf(j),j.telefono); }catch(e){} });
   return d;
 }
 /* ---- v14 · red de seguridad ----
@@ -312,6 +318,28 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const digits=t=>String(t||'').replace(/\D/g,'').replace(/^0034|^34(?=\d{9}$)/,'');
 const fmtTel=t=>{const d=digits(t);return d.length===9?d.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3'):t};
+/* v19 · varios teléfonos: j.telefono = el principal (compatibilidad), j.telefonos = los demás (máx. MAXTEL en total).
+   splitTels acepta texto con varios números ("625677431 / 933516444, 618487521", "+34 625 67 74 31; 93 351 64 44",
+   o incluso pegados "625677431933516444") o un array, y devuelve números de 9 cifras sin repetir. */
+function splitTels(v){
+  if(Array.isArray(v)) return uniqTels(v.flatMap(splitTels));
+  const t=String(v??'').trim(); if(!t) return [];
+  if(/\+(?!\s*34)\d/.test(t)){const d=t.replace(/\D/g,''); return d.length>=6?[d]:[]} /* número extranjero: se deja tal cual */
+  const c=t.replace(/[\s.\-()]/g,'');
+  if(/^\+?\d+$/.test(c)){ /* solo cifras: 9 = uno, 18/27/36 = varios pegados, otra longitud = se deja tal cual */
+    const d=c.replace(/^\+/,'').replace(/^0034(?=\d{9}$)|^34(?=\d{9}$)/,'');
+    if(d.length%9===0) return uniqTels(d.match(/\d{9}/g));
+    return d.length>=6&&d.length<=15?[d]:[];
+  }
+  const out=[], re=/(?:(?:\+|00)\s*34[\s.\-]*)?([6-9](?:[\s.\-]*\d){8})/g; let m;
+  while((m=re.exec(t))) out.push(m[1].replace(/\D/g,''));
+  return uniqTels(out);
+}
+function uniqTels(l){const o=[];for(const x of l){const d=String(x||'');if(d&&!o.includes(d))o.push(d)}return o}
+/* todos los teléfonos del parte, el principal primero */
+function telsOf(j){return uniqTels([...splitTels(j&&j.telefono),...splitTels(j&&j.telefonos)]).slice(0,MAXTEL)}
+function setTels(j,l,raw){l=uniqTels(l).slice(0,MAXTEL); j.telefono=l[0]||String(raw??'').trim(); j.telefonos=l.slice(1); return j}
+const esMovil=t=>/^[67]\d{8}$/.test(t);
 const fullAddr=j=>[j.direccion,j.poblacion].filter(Boolean).join(' - ');
 function ago(iso){
   const s=(Date.now()-new Date(iso))/1000; if(!(s>=0)) return '';
@@ -441,7 +469,7 @@ function visible(){
     if(tab==='pendiente') return !(j.checks||{}).cita;
     return j.compania===tab;
   });
-  if(query){const q=query.toLowerCase();l=l.filter(j=>[j.numero,j.direccion,j.poblacion,j.telefono,j.asegurado,j.averia,j.notas,j.condiciones,j.modalidad,j.proveedor,...(j.importes||[]).map(l=>l.codigo+' '+l.desc)].join(' ').toLowerCase().includes(q)||digits(j.telefono).includes(q.replace(/\s/g,'')))}
+  if(query){const q=query.toLowerCase();l=l.filter(j=>[j.numero,j.direccion,j.poblacion,telsOf(j).join(' '),telsOf(j).map(fmtTel).join(' '),j.telefono,j.asegurado,j.averia,j.notas,j.condiciones,j.modalidad,j.proveedor,...(j.importes||[]).map(l=>l.codigo+' '+l.desc)].join(' ').toLowerCase().includes(q)||(q.replace(/\s/g,'').length>=3&&telsOf(j).some(t=>t.includes(q.replace(/\s/g,'')))))}
   return l.sort((a,b)=>(b.orden||0)-(a.orden||0));
 }
 
@@ -454,8 +482,25 @@ function render(){
   $('#tabs').innerHTML=TABS.map(([k,n,ic])=>{const c=cnt(k);return `<button data-tab="${k}" class="${k===tab?'on':''}"><span class="ic">${ic}</span>${n}${c?`<span class="badge">${c}</span>`:''}</button>`}).join('');
   renderSync();
 }
+function telHref(t){return t.length===9?'tel:+34'+t:'tel:+'+t}
+function waHref(t){return 'https://wa.me/'+(t.length===9?'34'+t:t)}
+/* botones de llamada (uno por número) + WhatsApp: al móvil si solo hay uno, si hay varios móviles se elige */
+function telBtns(tels){
+  if(!tels.length) return `<button class="btn call" data-act="edit">${ICON.phone}Añadir teléfono</button><span></span>`;
+  const many=tels.length>1, mov=tels.filter(esMovil), waT=mov.length?mov:[tels[0]];
+  const calls=tels.map(t=>`<a class="btn call${many?' compact':''}" href="${telHref(t)}" data-tel="${t}">${ICON.phone}${fmtTel(t)}</a>`).join('');
+  const wa=waT.length>1?`<button type="button" class="btn wa${many?' compact':''}" data-act="wa" data-tels="${waT.join(',')}">WhatsApp ▾</button>`
+    :`<a class="btn wa${many?' compact':''}" href="${waHref(waT[0])}" data-wa="${waT[0]}" target="_blank" rel="noopener">WhatsApp${many?' '+fmtTel(waT[0]).slice(-3):''}</a>`;
+  const span=(tels.length+1)%2?' style="grid-column:1/-1"':'';
+  return calls+wa.replace(/^<(a|button) /,`<$1${span} `);
+}
+function openWA(list){
+  openSheet(`<h2>WhatsApp</h2><p class="hint" style="margin-top:-6px">¿A qué número?</p><div class="menu">${list.map(t=>`<a class="btn wa" href="${waHref(t)}" target="_blank" rel="noopener" data-wa="${t}">WhatsApp · ${fmtTel(t)}</a>`).join('')}</div>
+  <div class="actions"><button class="btn soft" id="waOk">Cerrar</button></div>`);
+  $('#waOk').onclick=closeSheet; $('#sheet').querySelectorAll('[data-wa]').forEach(a=>a.addEventListener('click',()=>setTimeout(closeSheet,300)));
+}
 function card(j){
-  const tel=digits(j.telefono), addr=fullAddr(j), q=encodeURIComponent(addr+', España'), ch=j.checks||{};
+  const tels=telsOf(j), tel=tels[0]||'', addr=fullAddr(j), q=encodeURIComponent(addr+', España'), ch=j.checks||{};
   const all=CHECKS.every(([k])=>ch[k]);
   return `<article class="card ${j.compania}${all?' done':''}" data-id="${esc(j.id)}">
   <div class="top">
@@ -470,7 +515,7 @@ function card(j){
     <div class="grip" data-grip="1" role="button" aria-label="Arrastrar para ordenar">${ICON.grip}</div>
   </div>
   <div class="grid">
-    ${tel?`<a class="btn call" href="tel:+34${tel}">${ICON.phone}${fmtTel(tel)}</a><a class="btn wa" href="https://wa.me/34${tel}" target="_blank" rel="noopener">WhatsApp</a>`:`<button class="btn call" data-act="edit">${ICON.phone}Añadir teléfono</button><span></span>`}
+    ${telBtns(tels)}
     <a class="btn soft" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${ICON.pin}Maps</a>
     <a class="btn soft" href="https://waze.com/ul?q=${q}&navigate=yes" target="_blank" rel="noopener">Waze</a>
   </div>
@@ -486,6 +531,7 @@ $('#list').addEventListener('click',e=>{
   if(act==='edit') openEdit(j);
   if(act==='up'||act==='down') move(j,act);
   if(act==='visita') openVisita(j);
+  if(act==='wa') openWA(e.target.closest('[data-tels]').dataset.tels.split(','));
 });
 $('#list').addEventListener('change',e=>{
   const k=e.target.dataset.check; if(!k) return; const j=jobs.find(x=>x.id===e.target.closest('.card').dataset.id);
@@ -641,8 +687,8 @@ function openEdit(j){
   <div class="f"><label>Compañía</label><div class="seg" id="segComp">${Object.entries(COMP).map(([k,n])=>`<button type="button" data-c="${k}" class="${e.compania===k?'on':''}">${n}</button>`).join('')}</div></div>
   <div class="row2"><div class="f"><label>Modalidad</label>${sel('e_modalidad',MODS,e.modalidad,'Otra')}</div>
   <div class="f"><label>Proveedor</label>${sel('e_proveedor',PROVS,e.proveedor,'Otro')}</div></div>
-  <div class="row2"><div class="f"><label>Nº siniestro</label><input id="e_numero" inputmode="numeric" value="${esc(e.numero)}"></div>
-  <div class="f"><label>Teléfono</label><input id="e_telefono" type="tel" inputmode="tel" value="${esc(e.telefono)}"></div></div>
+  <div class="f"><label>Nº siniestro</label><input id="e_numero" inputmode="numeric" value="${esc(e.numero)}"></div>
+  <div class="f"><label>Teléfonos</label><div id="telList"></div><button type="button" class="btn soft" id="telAdd">+ Añadir teléfono</button></div>
   <div class="f"><label>Asegurado / cliente</label><input id="e_asegurado" value="${esc(e.asegurado)}"></div>
   <div class="f"><label>Dirección</label><input id="e_direccion" value="${esc(e.direccion)}" placeholder="Calle, número, piso"></div>
   <div class="f"><label>Población</label><input id="e_poblacion" value="${esc(e.poblacion)}"></div>
@@ -669,6 +715,14 @@ function openEdit(j){
     s.onchange=()=>{t.style.display=s.value==='__otra'?'':'none'; if(s.value==='__otra') t.focus(); upd()};
     t.oninput=upd;
   }
+  { const l=telsOf(e); e._tels=l.length?l.map(fmtTel):[e.telefono||''];
+    const draw=()=>{ $('#telList').innerHTML=e._tels.map((t,i)=>`<div class="telrow"><input class="e_tel" type="tel" inputmode="tel" autocomplete="off" data-i="${i}" value="${esc(t)}" placeholder="${i?'Otro teléfono':'Teléfono principal'}">${e._tels.length>1?`<button type="button" class="x" data-rm="${i}" aria-label="Quitar teléfono">×</button>`:''}</div>`).join('');
+      $('#telAdd').hidden=e._tels.length>=MAXTEL; };
+    draw();
+    $('#telList').oninput=ev=>{const i=ev.target.dataset.i; if(i!=null) e._tels[+i]=ev.target.value};
+    $('#telList').onclick=ev=>{const b=ev.target.closest('[data-rm]'); if(!b) return; e._tels.splice(+b.dataset.rm,1); if(!e._tels.length) e._tels=['']; draw()};
+    $('#telAdd').onclick=()=>{ if(e._tels.length>=MAXTEL) return; e._tels.push(''); draw(); const ins=$('#telList').querySelectorAll('input'); ins[ins.length-1].focus() };
+  }
   $('#segComp').onclick=ev=>{const b=ev.target.closest('[data-c]');if(!b)return;e.compania=b.dataset.c;[...$('#segComp').children].forEach(x=>x.classList.toggle('on',x===b))};
   $('#eCancel').onclick=closeSheet;
   $('#eSave').onclick=()=>commit();
@@ -681,8 +735,9 @@ function toLocalInput(iso){const d=new Date(iso);if(isNaN(d))return '';const p=n
 function readSel(k){const s=$('#e_'+k);return s.value==='__otra'?$('#e_'+k+'_txt').value.trim():s.value}
 function commit(msg){
   const e=editing;
-  ['numero','telefono','asegurado','direccion','poblacion','averia','condiciones','notas'].forEach(k=>e[k]=$('#e_'+k).value.trim()); e.poblacion=cleanPob(e.poblacion);
-  e.telefono=digits(e.telefono)||e.telefono;
+  ['numero','asegurado','direccion','poblacion','averia','condiciones','notas'].forEach(k=>e[k]=$('#e_'+k).value.trim()); e.poblacion=cleanPob(e.poblacion);
+  { const raw=[...document.querySelectorAll('#telList .e_tel')].map(i=>i.value.trim()).filter(Boolean);
+    setTels(e,raw.flatMap(splitTels),raw.find(x=>!splitTels(x).length)||''); delete e._tels; }
   e.modalidad=readSel('modalidad'); e.proveedor=readSel('proveedor');
   const f=$('#e_fecha').value; if(f) e.fecha=new Date(f).toISOString();
   const v=$('#e_visita').value; e.visita=v&&!isNaN(new Date(v))?new Date(v).toISOString():''; if(e.visita) e.checks={...(e.checks||{}),cita:true};
@@ -761,7 +816,7 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v18 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v19 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
@@ -852,7 +907,7 @@ function merge(list,overwrite){
     if(isDead(r)){skipped++;continue}
     const j=normalize(r);
     const ex=jobs.find(x=>(j.numero&&x.numero===j.numero)||x.id===j.id);
-    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','telefono','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
+    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; { const a=telsOf(ex), u=uniqTels([...a,...telsOf(j)]).slice(0,MAXTEL); if(u.length>a.length) setTels(ex,u,ex.telefono); else if(!ex.telefono&&j.telefono) ex.telefono=j.telefono; } if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
     else { j.orden=++top; jobs.push(j); added++; }
   }
   return {added,updated,skipped};
@@ -861,7 +916,7 @@ function normalize(r){
   let c=String(r.compania||r.company||'').toLowerCase();
   c=c.includes('iris')?'iris':c.includes('luc')?'lucia':c?'particular':'particular';
   return {id:r.id||('x-'+(r.numero||Date.now().toString(36))),numero:String(r.numero||r.siniestro||''),compania:c,direccion:r.direccion||'',poblacion:cleanPob(r.poblacion),
-    telefono:digits(r.telefono)||String(r.telefono||''),asegurado:r.asegurado||'',averia:r.averia||'',condiciones:r.condiciones||'',notas:r.notas||'',fotos:Array.isArray(r.fotos)?r.fotos:[],
+    ...(t=>({telefono:t[0]||(splitTels(r.telefono).length?'':String(r.telefono??'').trim()),telefonos:t.slice(1)}))(uniqTels([...splitTels(r.telefono),...splitTels(r.telefonos),...splitTels(r.telefono2),...splitTels(r.telefono3)]).slice(0,MAXTEL)),asegurado:r.asegurado||'',averia:r.averia||'',condiciones:r.condiciones||'',notas:r.notas||'',fotos:Array.isArray(r.fotos)?r.fotos:[],
     fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},visita:normVisita(r.visita||r.horaVisita||r.hora_visita),importes:normImportes(r.importes),modalidad:guessModalidad(r),proveedor:(r.proveedor??r.provider)!=null?canon(r.proveedor??r.provider,PROVS):(c==='iris'||c==='lucia'?'Santa Lucía':''),archivado:!!r.archivado,mod:r.mod||0};
 }
 function normVisita(v){ if(!v) return ''; const d=new Date(v); return isNaN(d)?'':d.toISOString(); }
