@@ -379,7 +379,26 @@ async function install(){
 $('#bInstall').onclick=install; $('#bInstall2').onclick=install;
 
 if('serviceWorker' in navigator && location.protocol!=='file:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+/* importar por enlace: #importar=<JSON en base64url, UTF-8>. El fragmento (#) nunca llega al servidor */
+function b64urlToText(b){
+  b=b.replace(/-/g,'+').replace(/_/g,'/').replace(/\s/g,''); while(b.length%4) b+='=';
+  const bin=atob(b), u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(u);
+}
+function importFromHash(){
+  const m=location.hash.match(/^#importar=(.+)$/); if(!m) return false;
+  history.replaceState(null,'',location.pathname+location.search);
+  try{
+    let raw=decodeURIComponent(m[1]); const d=JSON.parse(b64urlToText(raw));
+    const list=Array.isArray(d)?d:d.partes; if(!Array.isArray(list)) throw 0;
+    const n=merge(list,false); save(); render();
+    toast(n.added?(n.added===1?'1 siniestro importado':n.added+' siniestros importados'):'Esos siniestros ya estaban en la app');
+  }catch(e){toast('El enlace de importación no es válido')}
+  return true;
+}
+addEventListener('hashchange',importFromHash);
 render();
+importFromHash();
 firstRun().then(()=>sync());
 setInterval(()=>{render()},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){sync();render()}});
