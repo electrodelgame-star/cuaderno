@@ -517,8 +517,6 @@ function card(j){
   </div>
   <div class="grid">
     ${telBtns(tels)}
-    <a class="btn soft" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${ICON.pin}Maps</a>
-    <a class="btn soft" href="https://waze.com/ul?q=${q}&navigate=yes" target="_blank" rel="noopener">Waze</a>
   </div>
   ${(()=>{const v=fmtVisita(j.visita);return `<button class="visita${v?' set':''}${v&&v.hoy?' hoy':''}${v&&v.pasada?' pasada':''}" data-act="visita">${ICON.clock}<span><span class="vl">Hora de visita</span><span class="vv">${v?esc(v.txt):'Poner hora de visita'}</span></span></button>`})()}
   <div class="checks">${CHECKS.map(([k,n])=>`<label><input type="checkbox" data-check="${k}" ${ch[k]?'checked':''}>${n}</label>`).join('')}</div>
@@ -818,7 +816,7 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v20 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v21 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
