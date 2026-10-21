@@ -145,6 +145,9 @@ nav .badge{position:absolute;top:0;right:calc(50% - 26px);background:var(--line)
 .f label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
 .f input,.f textarea,.f select{width:100%;border:1.5px solid #E0D6CA;border-radius:11px;padding:11px 12px;font-size:16px;background:#FBF7F1;color:var(--brown);font-family:inherit}
 .f textarea{min-height:70px;resize:vertical}
+.xamt{display:flex;align-items:center;gap:10px;margin-top:8px}.xamt .sl{flex:1;font-size:13px;color:var(--muted);font-weight:600}.xamt input{width:130px;flex:0 0 130px;text-align:right}
+.imp.mat .r2{grid-template-columns:1fr 96px 44px}.imp.mat [data-k=desc]{text-align:left}
+.xtot div{display:flex;justify-content:space-between;margin-top:6px;font-size:14px}
 .f input:focus,.f textarea:focus,.f select:focus{outline:none;border-color:var(--teal)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -258,7 +261,8 @@ function load(){
 /* migraciones: un fallo aquí nunca debe vaciar la lista */
 function migrate(d){
   d=d.filter(j=>j&&typeof j==='object');
-  d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor&&/^(caixa ?bank|segur ?caixa)$/.test(fold(j.proveedor))) j.proveedor='SegurCaixa'; if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); if(!Array.isArray(j.fotos)) j.fotos=[]; if(!Array.isArray(j.telefonos)||/[\/,;]|\d{18}/.test(String(j.telefono||''))) setTels(j,telsOf(j),j.telefono); }catch(e){} });
+  d.forEach(j=>{ try{ if(j.poblacion) j.poblacion=cleanPob(j.poblacion); if(j.proveedor&&/^(caixa ?bank|segur ?caixa)$/.test(fold(j.proveedor))) j.proveedor='SegurCaixa'; if(j.proveedor==null) j.proveedor=(j.compania==='iris'||j.compania==='lucia')?'Santa Lucía':''; if(j.modalidad==null) j.modalidad=guessModalidad(j); if(!Array.isArray(j.fotos)) j.fotos=[]; if(!Array.isArray(j.telefonos)||/[\/,;]|\d{18}/.test(String(j.telefono||''))) setTels(j,telsOf(j),j.telefono); }catch(e){}
+    try{ if(!Array.isArray(j.materiales)||'material' in j||'materialImporte' in j){ j.materiales=cleanMats(normMats(j.materiales,j)); delete j.material; delete j.materialImporte; } if(j.propina==null) j.propina=''; }catch(e){ if(!Array.isArray(j.materiales)) j.materiales=[]; } });
   return d;
 }
 /* ---- v14 · red de seguridad ----
@@ -373,6 +377,15 @@ function eur(n){
   return (neg?'-':'')+a.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+b+' €';
 }
 const numTxt=n=>n===''||n==null?'':String(n).replace('.',',');
+/* v22 · importes aparte (material, propina): número o '' (vacío). Nunca entran en totales() */
+function readAmt(v){ return String(v??'').trim()===''?'':Math.round(parseNum(v)*100)/100; } /* sin r2: migrate() la usa antes de que exista */
+function amtTxt(v){ return v===''||v==null||!isFinite(+v)?'':(Math.round(+v*100)/100).toFixed(2).replace('.',','); }
+/* materiales: j.materiales=[{desc,precio}] (precio en €, aparte de importes) */
+function normMats(a,j){ let l=(Array.isArray(a)?a:[]).filter(x=>x&&typeof x==='object').map(x=>({desc:String(x.desc??x.material??''),precio:readAmt(x.precio)}));
+  if(!l.length&&j&&((typeof j.material==='string'&&j.material.trim())||(j.materialImporte!=null&&j.materialImporte!==''))) l=[{desc:String(j.material||'').trim(),precio:readAmt(j.materialImporte)}];
+  return l; }
+function cleanMats(a){ return normMats(a).filter(x=>x.desc.trim()||x.precio!=='').map(x=>({desc:x.desc.trim(),precio:x.precio})); }
+function totMats(a){ return r2(normMats(a).reduce((s,x)=>s+(+x.precio||0),0)); }
 function normImportes(a){
   return Array.isArray(a)?a.filter(x=>x&&typeof x==='object').map(x=>({codigo:String(x.codigo??''),desc:String(x.desc??x.descripcion??''),cant:x.cant===''||x.cant==null?1:parseNum(x.cant),precio:parseNum(x.precio)})):[];
 }
@@ -470,7 +483,7 @@ function visible(){
     if(tab==='pendiente') return !(j.checks||{}).cita;
     return j.compania===tab;
   });
-  if(query){const q=query.toLowerCase();l=l.filter(j=>[j.numero,j.direccion,j.poblacion,telsOf(j).join(' '),telsOf(j).map(fmtTel).join(' '),j.telefono,j.asegurado,j.averia,j.notas,j.condiciones,j.modalidad,j.proveedor,...(j.importes||[]).map(l=>l.codigo+' '+l.desc)].join(' ').toLowerCase().includes(q)||(q.replace(/\s/g,'').length>=3&&telsOf(j).some(t=>t.includes(q.replace(/\s/g,'')))))}
+  if(query){const q=query.toLowerCase();l=l.filter(j=>[j.numero,j.direccion,j.poblacion,telsOf(j).join(' '),telsOf(j).map(fmtTel).join(' '),j.telefono,j.asegurado,j.averia,j.notas,j.condiciones,j.modalidad,j.proveedor,...(j.materiales||[]).map(m=>m.desc),...(j.importes||[]).map(l=>l.codigo+' '+l.desc)].join(' ').toLowerCase().includes(q)||(q.replace(/\s/g,'').length>=3&&telsOf(j).some(t=>t.includes(q.replace(/\s/g,'')))))}
   return l.sort((a,b)=>(b.orden||0)-(a.orden||0));
 }
 
@@ -675,7 +688,7 @@ function setVisita(j,iso){
 }
 function openEdit(j){
   const isNew=!j;
-  editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},visita:'',importes:[],modalidad:'',proveedor:tab==='iris'||tab==='lucia'?'Santa Lucía':'',archivado:false};
+  editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},visita:'',importes:[],materiales:[],propina:'',modalidad:'',proveedor:tab==='iris'||tab==='lucia'?'Santa Lucía':'',archivado:false};
   editing._new=isNew;
   const e=editing; e.importes=normImportes(e.importes);
   const sel=(id,opts,v,otra)=>{const c=canon(v,opts), other=c&&!opts.includes(c);
@@ -698,6 +711,13 @@ function openEdit(j){
   <div class="f"><label>Importes</label><div class="imps" id="imps"></div>
     <button type="button" class="addimp" id="addImp">+ Añadir línea</button>
     <div class="imptot" id="impTot"></div></div>
+  <div class="f" id="secMaterial"><label>Material</label><div class="imps" id="mats"></div>
+    <button type="button" class="addimp" id="addMat">+ Añadir material</button>
+    <div class="imptot xtot" id="matTot"></div>
+    <p class="hint" style="margin:4px 0 0">Aparte: no se suma a los importes de los códigos.</p></div>
+  <div class="f" id="secPropina"><label>Propina</label>
+    <div class="xamt"><span class="sl">Propina €</span><input id="e_propina" inputmode="decimal" placeholder="0,00" value="${esc(amtTxt(e.propina))}"></div>
+    <p class="hint" style="margin:4px 0 0">Aparte: no se suma a los importes ni al total.</p></div>
   <div class="f"><label>Fotos</label><div class="photos" id="photos"></div></div>
   <div class="f"><label>Fecha de entrada</label><input id="e_fecha" type="datetime-local" value="${toLocalInput(e.fecha)}"></div>
   <div class="actions sticky">
@@ -708,6 +728,12 @@ function openEdit(j){
     <button class="btn soft" id="eArch">${e.archivado?'Sacar del archivo':'Archivar'}</button>
     <button class="btn danger" id="eDel">Borrar</button></div>`}`);
   renderPhotos(); renderImportes();
+  { /* v22 · Material y Propina: independientes de importes; se guardan solos (autoguardado) */
+    let tmr=null; const auto=()=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ if(e._new||!editing||editing.id!==e.id) return; const o=jobs.find(x=>x.id===e.id); if(!o) return;
+      o.materiales=cleanMats(e.materiales); o.propina=e.propina; o.mod=Date.now(); save() },500) };
+    e._autoMat=auto; renderMats();
+    $('#e_propina').oninput=ev=>{e.propina=readAmt(ev.target.value); auto()};
+  }
   for(const k of ['modalidad','proveedor']){
     const s=$('#e_'+k), t=$('#e_'+k+'_txt');
     const upd=()=>{e[k]=readSel(k);$('#eChips').innerHTML=chips(e)};
@@ -738,6 +764,7 @@ function commit(msg){
   { const raw=[...document.querySelectorAll('#telList .e_tel')].map(i=>i.value.trim()).filter(Boolean);
     setTels(e,raw.flatMap(splitTels),raw.find(x=>!splitTels(x).length)||''); delete e._tels; }
   e.modalidad=readSel('modalidad'); e.proveedor=readSel('proveedor');
+  e.materiales=cleanMats(e.materiales); e.propina=readAmt($('#e_propina').value); delete e._autoMat;
   const f=$('#e_fecha').value; if(f) e.fecha=new Date(f).toISOString();
   const v=$('#e_visita').value; e.visita=v&&!isNaN(new Date(v))?new Date(v).toISOString():''; if(e.visita) e.checks={...(e.checks||{}),cita:true};
   e.importes=normImportes(e.importes).filter(l=>l.codigo.trim()||l.desc.trim()||l.precio).map(l=>({...l,codigo:normCode(l.codigo),desc:l.desc.trim()}));
@@ -783,6 +810,19 @@ function renderImportes(){
   $('#imps').onclick=ev=>{const b=ev.target.closest('[data-del]'); if(!b) return; L.splice(+b.dataset.del,1); renderImportes();};
   $('#addImp').onclick=()=>{L.push({codigo:'',desc:'',cant:1,precio:0}); renderImportes(); const ins=$('#imps').querySelectorAll('.imp:last-child input'); if(ins[0]) ins[0].focus();};
 }
+function renderMats(){
+  const e=editing; if(!Array.isArray(e.materiales)) e.materiales=normMats(e.materiales,e); const L=e.materiales;
+  $('#mats').innerHTML=L.length?L.map((l,i)=>`<div class="imp mat" data-i="${i}">
+    <div class="r2"><div><span class="sl">Pieza / material</span><input data-k="desc" value="${esc(l.desc)}" placeholder="Ej.: diferencial 40A" autocomplete="off"></div>
+    <div><span class="sl">Precio €</span><input data-k="precio" inputmode="decimal" value="${esc(amtTxt(l.precio))}" placeholder="0,00"></div>
+    <button type="button" class="del" data-del="${i}" aria-label="Borrar material">${ICON.trash}</button></div></div>`).join(''):'<p class="hint" style="margin:2px 0 0">Sin material. Añade las piezas y su precio.</p>';
+  const tot=()=>{ $('#matTot').innerHTML=L.length?`<div class="big"><span>Total material</span><span>${eur(totMats(L))}</span></div>`:''; };
+  tot();
+  $('#mats').oninput=ev=>{const k=ev.target.dataset.k, box=ev.target.closest('.imp'); if(!k||!box) return; const l=L[+box.dataset.i];
+    l[k]=k==='precio'?readAmt(ev.target.value):ev.target.value; tot(); e._autoMat&&e._autoMat()};
+  $('#mats').onclick=ev=>{const b=ev.target.closest('[data-del]'); if(!b) return; L.splice(+b.dataset.del,1); renderMats(); e._autoMat&&e._autoMat()};
+  $('#addMat').onclick=()=>{L.push({desc:'',precio:''}); renderMats(); const ins=$('#mats').querySelectorAll('.imp:last-child input'); if(ins[0]) ins[0].focus()};
+}
 function renderImpTot(){
   const t=totales(editing.importes);
   $('#impTot').innerHTML=editing.importes.length?`<div><span>Total sin IVA</span><b>${eur(t.base)}</b></div><div><span>IVA 21%</span><span>${eur(t.iva)}</span></div><div class="big"><span>Total con IVA</span><span>${eur(t.total)}</span></div>`:'';
@@ -816,7 +856,7 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v21 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v22 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
@@ -907,7 +947,7 @@ function merge(list,overwrite){
     if(isDead(r)){skipped++;continue}
     const j=normalize(r);
     const ex=jobs.find(x=>(j.numero&&x.numero===j.numero)||x.id===j.id);
-    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; { const a=telsOf(ex), u=uniqTels([...a,...telsOf(j)]).slice(0,MAXTEL); if(u.length>a.length) setTels(ex,u,ex.telefono); else if(!ex.telefono&&j.telefono) ex.telefono=j.telefono; } if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
+    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; if(!(Array.isArray(r.materiales)&&r.materiales.length)&&!j.materiales.length&&(ex.materiales||[]).length) j.materiales=ex.materiales; if((r.propina===''||r.propina==null)&&ex.propina!=null&&ex.propina!=='') j.propina=ex.propina; Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; { const a=telsOf(ex), u=uniqTels([...a,...telsOf(j)]).slice(0,MAXTEL); if(u.length>a.length) setTels(ex,u,ex.telefono); else if(!ex.telefono&&j.telefono) ex.telefono=j.telefono; } if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; if(!(ex.materiales||[]).length&&j.materiales.length) ex.materiales=j.materiales; if((ex.propina==null||ex.propina==='')&&j.propina!=='') ex.propina=j.propina; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
     else { j.orden=++top; jobs.push(j); added++; }
   }
   return {added,updated,skipped};
@@ -917,7 +957,7 @@ function normalize(r){
   c=c.includes('iris')?'iris':c.includes('luc')?'lucia':c?'particular':'particular';
   return {id:r.id||('x-'+(r.numero||Date.now().toString(36))),numero:String(r.numero||r.siniestro||''),compania:c,direccion:r.direccion||'',poblacion:cleanPob(r.poblacion),
     ...(t=>({telefono:t[0]||(splitTels(r.telefono).length?'':String(r.telefono??'').trim()),telefonos:t.slice(1)}))(uniqTels([...splitTels(r.telefono),...splitTels(r.telefonos),...splitTels(r.telefono2),...splitTels(r.telefono3)]).slice(0,MAXTEL)),asegurado:r.asegurado||'',averia:r.averia||'',condiciones:r.condiciones||'',notas:r.notas||'',fotos:Array.isArray(r.fotos)?r.fotos:[],
-    fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},visita:normVisita(r.visita||r.horaVisita||r.hora_visita),importes:normImportes(r.importes),modalidad:guessModalidad(r),proveedor:(r.proveedor??r.provider)!=null?canon(r.proveedor??r.provider,PROVS):(c==='iris'||c==='lucia'?'Santa Lucía':''),archivado:!!r.archivado,mod:r.mod||0};
+    fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},visita:normVisita(r.visita||r.horaVisita||r.hora_visita),importes:normImportes(r.importes),materiales:cleanMats(normMats(r.materiales,r)),propina:readAmt(r.propina),modalidad:guessModalidad(r),proveedor:(r.proveedor??r.provider)!=null?canon(r.proveedor??r.provider,PROVS):(c==='iris'||c==='lucia'?'Santa Lucía':''),archivado:!!r.archivado,mod:r.mod||0};
 }
 function normVisita(v){ if(!v) return ''; const d=new Date(v); return isNaN(d)?'':d.toISOString(); }
 async function sync(manual){
