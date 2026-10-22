@@ -510,7 +510,7 @@ function telBtns(tels){
 }
 function openWA(list){
   openSheet(`<h2>WhatsApp</h2><p class="hint" style="margin-top:-6px">¿A qué número?</p><div class="menu">${list.map(t=>`<a class="btn wa" href="${waHref(t)}" target="_blank" rel="noopener" data-wa="${t}">WhatsApp · ${fmtTel(t)}</a>`).join('')}</div>
-  <div class="actions"><button class="btn soft" id="waOk">Cerrar</button></div>`);
+  <div class="actions"><button class="btn soft" id="waOk">Cerrar</button></div>`,{key:'wa'});
   $('#waOk').onclick=closeSheet; $('#sheet').querySelectorAll('[data-wa]').forEach(a=>a.addEventListener('click',()=>setTimeout(closeSheet,300)));
 }
 function card(j){
@@ -654,9 +654,58 @@ $('#bSearch').onclick=()=>{const s=$('#searchBar');s.classList.toggle('on');if(s
 $('#q').oninput=e=>{query=e.target.value.trim();render()};
 
 /* sheet */
-function openSheet(html){$('#sheet').innerHTML='<div class="grab"></div>'+html;$('#veil').classList.add('on');$('#sheet').classList.add('on');$('#sheet').scrollTop=0}
-function closeSheet(){$('#veil').classList.remove('on');$('#sheet').classList.remove('on');editing=null}
+/* v23 · botón «atrás» de Android: cada hoja/visor abierto encima de la lista es una «capa» con su entrada en el historial
+   (history.pushState). Atrás (popstate) cierra solo la capa de arriba; en la lista sin nada abierto, atrás sale de la app.
+   Al cerrar con los botones de la app se quitan las entradas sobrantes con history.go(-n), para no tener que pulsar dos veces.
+   hPushed = entradas nuestras en el historial; layers = capas abiertas. hSync() las iguala. */
+let layers=[], hPushed=0, hWait=false, hWaitT=0;
+function hSync(){
+  if(hWait) return;
+  if(hPushed>layers.length){ hWait=true; clearTimeout(hWaitT); hWaitT=setTimeout(()=>{ if(hWait){ hWait=false; hPushed=Math.max(0,(history.state&&history.state.cu)|0); hSync() } },1500); try{history.go(layers.length-hPushed)}catch(e){hWait=false} return; }
+  while(hPushed<layers.length){ hPushed++; try{history.pushState({cu:hPushed},'')}catch(e){} }
+}
+function pushLayer(L){ layers.push(L); hSync(); return L }
+function dropLayers(pred){ layers=layers.filter(l=>!pred(l)); hSync() }
+addEventListener('popstate',ev=>{
+  const cur=Math.max(0,(ev.state&&ev.state.cu)|0);
+  if(hWait){ hWait=false; clearTimeout(hWaitT); hPushed=cur; hSync(); return }
+  hPushed=Math.min(cur,hPushed);
+  while(layers.length>hPushed){ const L=layers.pop(); try{L.back()}catch(e){ try{closeSheet()}catch(e2){} } }
+  hSync();
+});
+/* sheet · opts: key (misma clave = se redibuja sin capa nueva), reopen (para volver a ella desde una hoja hija), back (qué hace «atrás») */
+function openSheet(html,opts){
+  opts=opts||{}; const key=opts.key||('s'+Date.now()+Math.random()), on=$('#sheet').classList.contains('on');
+  const top=layers[layers.length-1];
+  if(on&&top&&top.kind==='sheet'&&top.key===key){ if(opts.reopen) top.reopen=opts.reopen; if(opts.back) top.back=opts.back }
+  else{
+    if(on&&editing&&editing._flush) editing._flush();
+    const parent=on?[...layers].reverse().find(l=>l.kind==='sheet'):null;
+    pushLayer({kind:'sheet',key,reopen:opts.reopen,back:opts.back||(()=>{ if(parent&&parent.reopen) parent.reopen(); else closeSheet() })});
+  }
+  $('#sheet').innerHTML='<div class="grab"></div>'+html;$('#veil').classList.add('on');$('#sheet').classList.add('on');$('#sheet').scrollTop=0}
+function closeSheet(){
+  if(editing&&editing._flush) editing._flush(); /* v23: Material/Propina pendientes de autoguardar no se pierden */
+  $('#veil').classList.remove('on');$('#sheet').classList.remove('on');$('#viewer').classList.remove('on');editing=null;editCtx=null;
+  dropLayers(l=>l.kind==='sheet'||l.kind==='viewer');
+}
 $('#veil').onclick=closeSheet;
+/* atrás dentro de un parte: guarda lo pendiente; en un parte existente, si has cambiado algo se guarda (como «Guardar»).
+   En un parte nuevo sin guardar hace lo mismo que «Cancelar». */
+let editCtx=null;
+function editSig(e){
+  const v=id=>{const el=document.getElementById(id);return el?el.value:''};
+  return JSON.stringify([...['e_numero','e_asegurado','e_direccion','e_poblacion','e_visita','e_averia','e_condiciones','e_notas','e_fecha'].map(v),
+    readSel('modalidad'),readSel('proveedor'),[...document.querySelectorAll('#telList .e_tel')].map(i=>i.value),e.compania,normImportes(e.importes),
+    (e.fotos||[]).map(f=>String(f).length+String(f).slice(-24))]);
+}
+function editBack(e){
+  if(editing!==e||!editCtx){ closeSheet(); return }
+  if(e._flush) e._flush();
+  let dirty=false; try{ dirty=!e._new&&editSig(e)!==editCtx.sig }catch(err){ dirty=false }
+  if(dirty){ const L=editCtx.layer; commit(); if($('#sheet').classList.contains('on')&&editing===e&&!layers.includes(L)) pushLayer(L); return } /* si no se pudo guardar, sigue abierto */
+  closeSheet();
+}
 
 function openVisita(j){
   const p=n=>String(n).padStart(2,'0'), local=d=>`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
@@ -671,7 +720,7 @@ function openVisita(j){
   <div class="actions">
     ${base?'<button class="btn danger" id="vDel">Quitar</button>':'<button class="btn soft" id="vCancel">Cancelar</button>'}
     <button class="btn primary" id="vOk">Guardar</button>
-  </div>`);
+  </div>`,{key:'visita'});
   $('#vQuick').onclick=ev=>{const b=ev.target.closest('button');if(!b)return;if(b.dataset.d)$('#v_dia').value=b.dataset.d;if(b.dataset.h){$('#v_hora').value=b.dataset.h;if(!$('#v_dia').value)$('#v_dia').value=local(hoy)}};
   if($('#vCancel')) $('#vCancel').onclick=closeSheet;
   if($('#vDel')) $('#vDel').onclick=()=>setVisita(j,'');
@@ -726,12 +775,14 @@ function openEdit(j){
   </div>
   ${isNew?'':`<div class="actions">
     <button class="btn soft" id="eArch">${e.archivado?'Sacar del archivo':'Archivar'}</button>
-    <button class="btn danger" id="eDel">Borrar</button></div>`}`);
+    <button class="btn danger" id="eDel">Borrar</button></div>`}`,{key:'edit',back:()=>editBack(e)});
   renderPhotos(); renderImportes();
   { /* v22 · Material y Propina: independientes de importes; se guardan solos (autoguardado) */
-    let tmr=null; const auto=()=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ if(e._new||!editing||editing.id!==e.id) return; const o=jobs.find(x=>x.id===e.id); if(!o) return;
-      o.materiales=cleanMats(e.materiales); o.propina=e.propina; o.mod=Date.now(); save() },500) };
-    e._autoMat=auto; renderMats();
+    let tmr=null; const run=()=>{ tmr=null; if(e._new||!editing||editing.id!==e.id) return; const o=jobs.find(x=>x.id===e.id); if(!o) return;
+      o.materiales=cleanMats(e.materiales); o.propina=e.propina; o.mod=Date.now(); save() };
+    const auto=()=>{ clearTimeout(tmr); tmr=setTimeout(run,500) };
+    e._autoMat=auto; e._flush=()=>{ if(tmr){ clearTimeout(tmr); run() } }; /* v23: guarda ya lo pendiente (atrás, cerrar) */
+    renderMats();
     $('#e_propina').oninput=ev=>{e.propina=readAmt(ev.target.value); auto()};
   }
   for(const k of ['modalidad','proveedor']){
@@ -749,6 +800,7 @@ function openEdit(j){
     $('#telAdd').onclick=()=>{ if(e._tels.length>=MAXTEL) return; e._tels.push(''); draw(); const ins=$('#telList').querySelectorAll('input'); ins[ins.length-1].focus() };
   }
   $('#segComp').onclick=ev=>{const b=ev.target.closest('[data-c]');if(!b)return;e.compania=b.dataset.c;[...$('#segComp').children].forEach(x=>x.classList.toggle('on',x===b))};
+  editCtx={e,sig:editSig(e),layer:layers[layers.length-1]};
   $('#eCancel').onclick=closeSheet;
   $('#eSave').onclick=()=>commit();
   if(!isNew){
@@ -764,7 +816,7 @@ function commit(msg){
   { const raw=[...document.querySelectorAll('#telList .e_tel')].map(i=>i.value.trim()).filter(Boolean);
     setTels(e,raw.flatMap(splitTels),raw.find(x=>!splitTels(x).length)||''); delete e._tels; }
   e.modalidad=readSel('modalidad'); e.proveedor=readSel('proveedor');
-  e.materiales=cleanMats(e.materiales); e.propina=readAmt($('#e_propina').value); delete e._autoMat;
+  e.materiales=cleanMats(e.materiales); e.propina=readAmt($('#e_propina').value); if(e._flush){ e._flush(); delete e._flush } delete e._autoMat;
   const f=$('#e_fecha').value; if(f) e.fecha=new Date(f).toISOString();
   const v=$('#e_visita').value; e.visita=v&&!isNaN(new Date(v))?new Date(v).toISOString():''; if(e.visita) e.checks={...(e.checks||{}),cita:true};
   e.importes=normImportes(e.importes).filter(l=>l.codigo.trim()||l.desc.trim()||l.precio).map(l=>({...l,codigo:normCode(l.codigo),desc:l.desc.trim()}));
@@ -833,10 +885,10 @@ function renderPhotos(){
   $('#addPh').onclick=()=>$('#filePhoto').click(); $('#addGal').onclick=()=>$('#fileGallery').click();
   $('#photos').onclick=ev=>{
     const d=ev.target.dataset.del; if(d!==undefined){e.fotos.splice(+d,1);renderPhotos();return}
-    const i=ev.target.dataset.i; if(i!==undefined){$('#viewerImg').src=e.fotos[+i];$('#viewer').classList.add('on')}
+    const i=ev.target.dataset.i; if(i!==undefined){$('#viewerImg').src=e.fotos[+i];if(!$('#viewer').classList.contains('on')){$('#viewer').classList.add('on');pushLayer({kind:'viewer',back:()=>$('#viewer').classList.remove('on')})}}
   };
 }
-$('#viewer').onclick=()=>$('#viewer').classList.remove('on');
+$('#viewer').onclick=()=>{$('#viewer').classList.remove('on');dropLayers(l=>l.kind==='viewer')};
 const addFotos=async ev=>{
   for(const file of ev.target.files){ try{ editing.fotos=[...(editing.fotos||[]),await shrink(file)] }catch(e){toast('No se pudo leer la foto')} }
   ev.target.value=''; renderPhotos();
@@ -846,7 +898,8 @@ function shrink(file,max=1000,q=.62){return new Promise((ok,ko)=>{const img=new 
 $('#bAdd').onclick=()=>openEdit(null);
 
 /* data menu: export/import/sync */
-$('#bData').onclick=()=>{
+$('#bData').onclick=()=>openMenu();
+function openMenu(){
   openSheet(`<h2>Copia de seguridad</h2><div class="menu">
   <button class="btn soft" id="mExp">⬇️&nbsp; Exportar todo (archivo .json)</button>
   <button class="btn soft" id="mImp">⬆️&nbsp; Importar copia (.json)</button>
@@ -856,13 +909,13 @@ $('#bData').onclick=()=>{
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v22 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
-  <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`);
+  <p class="hint">Cuaderno v23 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`,{key:'menu',reopen:openMenu});
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
   $('#mSync').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));sync(true)};
   $('#mOk').onclick=()=>{cfg.url=$('#mUrl').value.trim();localStorage.setItem(CFG,JSON.stringify(cfg));closeSheet();if(cfg.url)sync()};
-};
+}
 function openCopias(){
   const fd=t=>new Date(t).toLocaleString('es-ES',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
   const items=[...diarias().reverse().map(k=>{const raw=localStorage.getItem(k);let t=0;try{t=JSON.parse(raw).t||0}catch(e){}
@@ -873,7 +926,7 @@ function openCopias(){
   <p class="hint" style="margin-top:-6px">El móvil guarda solo una copia por día (los últimos 7 días) y otra antes de cualquier cambio grande. Las fotos no van en estas copias, pero al restaurar se conservan las que tengas ahora. Ahora tienes ${jobs.length} partes.</p>
   <div id="bkList">${items.length?items.map(x=>`<div class="cat" data-k="${esc(x.k)}"><div class="ch"><b>${esc(x.tit)}</b><span>${x.n<0?'ilegible':x.n+(x.n===1?' parte':' partes')}</span></div>
     <div style="display:flex;gap:8px;align-items:center"><span style="flex:1;font-size:14px;color:var(--brown-2)">${esc(x.sub)} · ${x.kb} KB</span>${x.n>=0?'<button type="button" class="btn primary" data-res="1" style="min-width:120px">Restaurar</button>':''}</div></div>`).join(''):'<p class="hint">Todavía no hay copias. Se crea una al abrir la app cada día.</p>'}</div>
-  <div class="actions sticky"><button class="btn soft" id="bkOk">Cerrar</button></div>`);
+  <div class="actions sticky"><button class="btn soft" id="bkOk">Cerrar</button></div>`,{key:'copias'});
   $('#bkOk').onclick=closeSheet;
   $('#bkList').onclick=ev=>{const b=ev.target.closest('[data-res]'); if(!b) return; restaurar(b.closest('.cat').dataset.k)};
 }
@@ -900,7 +953,7 @@ function openBorrados(){
   <p class="hint" style="margin-top:-6px">Estos partes no vuelven a entrar al leer el correo. Pulsa “Recuperar” si borraste uno por error. Se guardan ${DEAD_DAYS} días; después se eliminan del todo (y siguen sin volver a entrar).</p>
   <div id="dList">${l.length?l.map(([k,x])=>`<div class="cat" data-k="${esc(k)}"><div class="ch"><b>${esc(x.numero||'(sin nº)')}</b><span>borrado ${esc(new Date(+x.borrado||x.t).toLocaleDateString('es-ES',{day:'numeric',month:'short'}))} · ${(n=>n<=1?'se elimina hoy':'quedan '+n+' días')(diasQuedan(x))}</span></div>
     <div style="display:flex;gap:8px;align-items:center"><span style="flex:1;font-size:14px;color:var(--brown-2)">${esc(x.dir||(x.parte&&fullAddr(x.parte))||'')}</span><button type="button" class="btn primary" data-rec="1" style="min-width:120px">Recuperar</button></div></div>`).join(''):'<p class="hint">No hay partes borrados.</p>'}</div>
-  <div class="actions sticky"><button class="btn soft" id="dOk">Cerrar</button></div>`);
+  <div class="actions sticky"><button class="btn soft" id="dOk">Cerrar</button></div>`,{key:'borrados'});
   $('#dOk').onclick=closeSheet;
   $('#dList').onclick=ev=>{const b=ev.target.closest('[data-rec]'); if(!b) return; const k=b.closest('.cat').dataset.k, x=dead[k]; if(!x) return;
     delete dead[k]; saveDead();
@@ -914,7 +967,7 @@ function openCodigos(){
   <p class="hint" style="margin-top:-6px">Se aprenden solos al guardar los importes de cada parte. Precios sin IVA.</p>
   <div class="f"><input id="cQ" type="search" placeholder="Buscar código o descripción…" autocomplete="off"></div>
   <div id="cList"></div>
-  <div class="actions sticky"><button class="btn primary" id="cOk">Hecho</button></div>`);
+  <div class="actions sticky"><button class="btn primary" id="cOk">Hecho</button></div>`,{key:'codigos'});
   const draw=()=>{const r=buscarCodigos($('#cQ').value.trim(),1e4);
     $('#cList').innerHTML=r.length?r.map(x=>`<div class="cat" data-c="${esc(x.c)}"><div class="ch"><b>${esc(x.c)}</b><span>${x.usos||0} ${x.usos===1?'uso':'usos'}</span></div>
     <div class="cr"><input data-k="desc" value="${esc(x.desc||'')}" placeholder="Descripción"><input data-k="precio" inputmode="decimal" value="${x.precio?r2(x.precio).toFixed(2).replace('.',','):''}" placeholder="0,00 €">
@@ -980,7 +1033,7 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;i
 addEventListener('appinstalled',()=>{$('#bInstall').hidden=true;toast('Instalada en el escritorio')});
 async function install(){
   if(deferredPrompt){deferredPrompt.prompt();const r=await deferredPrompt.userChoice;deferredPrompt=null;if(r.outcome==='accepted')$('#bInstall').hidden=true;return}
-  openSheet(`<h2>Poner en el escritorio</h2><p class="hint" style="font-size:15px">En Chrome (Android): pulsa los <b>tres puntos ⋮</b> arriba a la derecha y elige <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar aplicación”</b>.<br><br>En iPhone (Safari): pulsa <b>Compartir</b> y luego <b>“Añadir a pantalla de inicio”</b>.</p><div class="actions"><button class="btn primary" onclick="closeSheet()">Entendido</button></div>`);
+  openSheet(`<h2>Poner en el escritorio</h2><p class="hint" style="font-size:15px">En Chrome (Android): pulsa los <b>tres puntos ⋮</b> arriba a la derecha y elige <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar aplicación”</b>.<br><br>En iPhone (Safari): pulsa <b>Compartir</b> y luego <b>“Añadir a pantalla de inicio”</b>.</p><div class="actions"><button class="btn primary" onclick="closeSheet()">Entendido</button></div>`,{key:'install'});
 }
 $('#bInstall').onclick=install; $('#bInstall2').onclick=install;
 
@@ -1008,6 +1061,7 @@ if(!cat){cat={};catFromJobs(jobs,true);saveCat()}
 purgaBorrados();
 copiaDiaria();
 render();
+hPushed=Math.max(0,(history.state&&history.state.cu)|0); hSync(); /* v23: tras recargar con una hoja abierta, quita entradas viejas */
 importFromHash();
 firstRun().then(()=>sync());
 let diaRevision=hoyKey(); /* purga y copia diaria también si la app se queda abierta al cambiar de día */
