@@ -129,6 +129,12 @@ body.dragging{touch-action:none;overscroll-behavior:none;cursor:grabbing}
 .addimp{width:100%;margin-top:8px;border:1.5px dashed #BFB2A4;border-radius:11px;min-height:46px;font-weight:700;color:var(--teal-2);background:transparent}
 .imptot{margin-top:10px;border-top:1.5px solid #E0D6CA;padding-top:8px;font-size:15px}
 .imptot div{display:flex;justify-content:space-between;padding:3px 2px}
+.imptot .ivarow{align-items:center}
+.imptot .ivalab{color:var(--muted);font-size:14px}
+.imptot select.ivasel{font:inherit;font-size:16px;font-weight:700;color:var(--brown);background-color:#fff;border:1.5px solid #D9CBC4;border-radius:10px;padding:6px 30px 6px 10px;min-height:40px;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.imptot select.ivasel:focus{outline:0;border-color:var(--teal)}
+.imptot select.ivasel{width:auto;flex:0 0 auto;margin:0}
+.imptot .ivarow>span{white-space:nowrap}
 .imptot .big{font-size:18px;font-weight:800;color:var(--teal-2)}
 .empty{text-align:center;color:var(--muted);padding:60px 20px;font-size:15px}
 .fab{position:fixed;right:20px;bottom:calc(98px + env(safe-area-inset-bottom));width:66px;height:66px;border-radius:20px;background:var(--teal);color:#fff;display:grid;place-items:center;box-shadow:0 6px 16px rgba(14,110,100,.35);z-index:15}
@@ -396,7 +402,13 @@ function normImportes(a){
   return Array.isArray(a)?a.filter(x=>x&&typeof x==='object').map(x=>({codigo:String(x.codigo??''),desc:String(x.desc??x.descripcion??''),cant:x.cant===''||x.cant==null?1:parseNum(x.cant),precio:parseNum(x.precio)})):[];
 }
 const lineaSub=l=>r2(parseNum(l.cant)*parseNum(l.precio));
-function totales(list){const base=r2((list||[]).reduce((s,l)=>s+lineaSub(l),0)), iva=r2(base*IVA); return {base,iva,total:r2(base+iva)}}
+/* v25 · tipo de IVA por parte: j.ivaTipo = 21 | 10 | 0 (exento). Sin campo = 21 %. */
+const IVAS=[[21,'IVA 21%'],[10,'IVA 10%'],[0,'Exento']];
+function ivaIn(v){ if(v==null||v==='') return undefined; if(/exent/i.test(String(v))) return 0; let n=Number(String(v).replace('%','').replace(',','.').trim()); if(n>0&&n<1) n=Math.round(n*100); return n===10||n===0?n:21 }
+function ivaDe(j){ const v=ivaIn(j&&j.ivaTipo); return v==null?21:v }
+function ivaRate(t){ return t===21?IVA:t/100 }
+function totales(list,tipo=21){const base=r2((list||[]).reduce((s,l)=>s+lineaSub(l),0)), iva=r2(base*ivaRate(tipo)); return {base,iva,total:r2(base+iva),tipo}}
+function ivaCard(t){ return t===0?'exento de IVA':t===21?'IVA incl.':'IVA '+t+'% incl.' }
 /* borrados: localStorage cuaderno.borrados = {clave:{t,id,numero,parte}}; clave = nº normalizado o "id:"+id.
    Sincronización, seed, enlaces #importar y copias .json NO vuelven a añadir un parte borrado; solo "Recuperar". */
 const normNum=n=>String(n??'').trim().toUpperCase().replace(/\s+/g,'');
@@ -530,7 +542,7 @@ function card(j){
       <div class="meta"><span class="num" data-act="edit">${esc(j.numero||'—')}</span><span class="ago">${ago(j.fecha)}</span></div>
       ${chips(j)}
       ${j.asegurado||j.averia?`<div class="who"><span class="tag">${COMP[j.compania]||''}</span>${esc(j.asegurado||'')}</div>`:''}
-      ${(()=>{const t=totales(j.importes);return t.base>0?`<div class="imp-card" data-act="edit">Importe: ${eur(t.total)} IVA incl.</div>`:''})()}
+      ${(()=>{const t=totales(j.importes,ivaDe(j));return t.base>0?`<div class="imp-card" data-act="edit">Importe: ${eur(t.total)} ${ivaCard(t.tipo)}</div>`:''})()}
     </div>
     <div class="grip" data-grip="1" role="button" aria-label="Arrastrar para ordenar">${ICON.grip}</div>
   </div>
@@ -720,7 +732,7 @@ let editCtx=null;
 function editSig(e){
   const v=id=>{const el=document.getElementById(id);return el?el.value:''};
   return JSON.stringify([...['e_numero','e_asegurado','e_direccion','e_poblacion','e_visita','e_averia','e_condiciones','e_notas','e_fecha'].map(v),
-    readSel('modalidad'),readSel('proveedor'),[...document.querySelectorAll('#telList .e_tel')].map(i=>i.value),e.compania,normImportes(e.importes),
+    readSel('modalidad'),readSel('proveedor'),[...document.querySelectorAll('#telList .e_tel')].map(i=>i.value),e.compania,normImportes(e.importes),ivaDe(e),
     (e.fotos||[]).map(f=>String(f).length+String(f).slice(-24))]);
 }
 function editBack(e){
@@ -762,7 +774,7 @@ function setVisita(j,iso){
 function openEdit(j){
   dispFlush(); if(j) j=jobs.find(x=>x.id===j.id)||j;
   const isNew=!j;
-  editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},visita:'',importes:[],materiales:[],propina:'',disponibilidad:'',modalidad:'',proveedor:tab==='iris'||tab==='lucia'?'Santa Lucía':'',archivado:false};
+  editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},visita:'',importes:[],ivaTipo:21,materiales:[],propina:'',disponibilidad:'',modalidad:'',proveedor:tab==='iris'||tab==='lucia'?'Santa Lucía':'',archivado:false};
   editing._new=isNew;
   const e=editing; e.importes=normImportes(e.importes);
   const sel=(id,opts,v,otra)=>{const c=canon(v,opts), other=c&&!opts.includes(c);
@@ -903,8 +915,12 @@ function renderMats(){
   $('#addMat').onclick=()=>{L.push({desc:'',precio:''}); renderMats(); const ins=$('#mats').querySelectorAll('.imp:last-child input'); if(ins[0]) ins[0].focus()};
 }
 function renderImpTot(){
-  const t=totales(editing.importes);
-  $('#impTot').innerHTML=editing.importes.length?`<div><span>Total sin IVA</span><b>${eur(t.base)}</b></div><div><span>IVA 21%</span><span>${eur(t.iva)}</span></div><div class="big"><span>Total con IVA</span><span>${eur(t.total)}</span></div>`:'';
+  const tipo=ivaDe(editing), t=totales(editing.importes,tipo);
+  const sel=`<select id="e_iva" class="ivasel" aria-label="Tipo de IVA">${IVAS.map(([v,l])=>`<option value="${v}"${v===tipo?' selected':''}>${l}</option>`).join('')}</select>`;
+  $('#impTot').innerHTML=editing.importes.length
+    ?`<div><span>Total sin IVA</span><b>${eur(t.base)}</b></div><div class="ivarow">${sel}<span>${tipo===0?'0,00 €':eur(t.iva)}</span></div><div class="big"><span>${tipo===0?'Total (exento de IVA)':'Total con IVA'}</span><span>${eur(t.total)}</span></div>`
+    :`<div class="ivarow"><span class="ivalab">Tipo de IVA</span>${sel}</div>`;
+  $('#e_iva').onchange=ev=>{ editing.ivaTipo=Number(ev.target.value); renderImpTot() };
 }
 function renderPhotos(){
   const e=editing;
@@ -936,7 +952,7 @@ function openMenu(){
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v24 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v25 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`,{key:'menu',reopen:openMenu});
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
@@ -1027,8 +1043,8 @@ function merge(list,overwrite){
     if(isDead(r)){skipped++;continue}
     const j=normalize(r);
     const ex=jobs.find(x=>(j.numero&&x.numero===j.numero)||x.id===j.id);
-    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; if(!(Array.isArray(r.materiales)&&r.materiales.length)&&!j.materiales.length&&(ex.materiales||[]).length) j.materiales=ex.materiales; if((r.propina===''||r.propina==null)&&ex.propina!=null&&ex.propina!=='') j.propina=ex.propina; if(!String(r.disponibilidad??'').trim()&&ex.disponibilidad) j.disponibilidad=ex.disponibilidad; Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; { const a=telsOf(ex), u=uniqTels([...a,...telsOf(j)]).slice(0,MAXTEL); if(u.length>a.length) setTels(ex,u,ex.telefono); else if(!ex.telefono&&j.telefono) ex.telefono=j.telefono; } if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; if(!(ex.materiales||[]).length&&j.materiales.length) ex.materiales=j.materiales; if((ex.propina==null||ex.propina==='')&&j.propina!=='') ex.propina=j.propina; if(!ex.disponibilidad&&j.disponibilidad) ex.disponibilidad=j.disponibilidad; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
-    else { j.orden=++top; jobs.push(j); added++; }
+    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; if(!(Array.isArray(r.materiales)&&r.materiales.length)&&!j.materiales.length&&(ex.materiales||[]).length) j.materiales=ex.materiales; if((r.propina===''||r.propina==null)&&ex.propina!=null&&ex.propina!=='') j.propina=ex.propina; if(!String(r.disponibilidad??'').trim()&&ex.disponibilidad) j.disponibilidad=ex.disponibilidad; if(j.ivaTipo==null){ if(ex.ivaTipo!=null) j.ivaTipo=ex.ivaTipo; else delete j.ivaTipo } Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; { const a=telsOf(ex), u=uniqTels([...a,...telsOf(j)]).slice(0,MAXTEL); if(u.length>a.length) setTels(ex,u,ex.telefono); else if(!ex.telefono&&j.telefono) ex.telefono=j.telefono; } if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; if(!(ex.materiales||[]).length&&j.materiales.length) ex.materiales=j.materiales; if((ex.propina==null||ex.propina==='')&&j.propina!=='') ex.propina=j.propina; if(!ex.disponibilidad&&j.disponibilidad) ex.disponibilidad=j.disponibilidad; if(ex.ivaTipo==null&&j.ivaTipo!=null) ex.ivaTipo=j.ivaTipo; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
+    else { if(j.ivaTipo==null) delete j.ivaTipo; j.orden=++top; jobs.push(j); added++; }
   }
   return {added,updated,skipped};
 }
@@ -1037,7 +1053,7 @@ function normalize(r){
   c=c.includes('iris')?'iris':c.includes('luc')?'lucia':c?'particular':'particular';
   return {id:r.id||('x-'+(r.numero||Date.now().toString(36))),numero:String(r.numero||r.siniestro||''),compania:c,direccion:r.direccion||'',poblacion:cleanPob(r.poblacion),
     ...(t=>({telefono:t[0]||(splitTels(r.telefono).length?'':String(r.telefono??'').trim()),telefonos:t.slice(1)}))(uniqTels([...splitTels(r.telefono),...splitTels(r.telefonos),...splitTels(r.telefono2),...splitTels(r.telefono3)]).slice(0,MAXTEL)),asegurado:r.asegurado||'',averia:r.averia||'',condiciones:r.condiciones||'',notas:r.notas||'',fotos:Array.isArray(r.fotos)?r.fotos:[],
-    fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},visita:normVisita(r.visita||r.horaVisita||r.hora_visita),importes:normImportes(r.importes),materiales:cleanMats(normMats(r.materiales,r)),propina:readAmt(r.propina),disponibilidad:String(r.disponibilidad??'').trim(),modalidad:guessModalidad(r),proveedor:(r.proveedor??r.provider)!=null?canon(r.proveedor??r.provider,PROVS):(c==='iris'||c==='lucia'?'Santa Lucía':''),archivado:!!r.archivado,mod:r.mod||0};
+    fecha:r.fecha||new Date().toISOString(),checks:r.checks||{},visita:normVisita(r.visita||r.horaVisita||r.hora_visita),importes:normImportes(r.importes),materiales:cleanMats(normMats(r.materiales,r)),propina:readAmt(r.propina),disponibilidad:String(r.disponibilidad??'').trim(),ivaTipo:ivaIn(r.ivaTipo),modalidad:guessModalidad(r),proveedor:(r.proveedor??r.provider)!=null?canon(r.proveedor??r.provider,PROVS):(c==='iris'||c==='lucia'?'Santa Lucía':''),archivado:!!r.archivado,mod:r.mod||0};
 }
 function normVisita(v){ if(!v) return ''; const d=new Date(v); return isNaN(d)?'':d.toISOString(); }
 async function sync(manual){
