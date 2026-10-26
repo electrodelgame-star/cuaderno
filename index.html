@@ -101,6 +101,7 @@ body.dragging{touch-action:none;overscroll-behavior:none;cursor:grabbing}
 .chip.p-lucia{background:#1F4E9C;color:#fff}.chip.p-caixa{background:#0A7FB0;color:#fff}.chip.p-naturgy{background:#E5781E;color:#fff}.chip.p-anovo{background:#6B3FA0;color:#fff}.chip.p-otro{background:#5E4F48;color:#fff}
 .sheet .chips{margin:-6px 0 12px}
 .imp-card{font-size:13.5px;font-weight:700;color:var(--teal-2);margin-top:3px}
+.imp-extra{font-size:12.5px;font-weight:600;color:var(--muted,#5b6470);margin-top:1px}
 .imps{display:flex;flex-direction:column;gap:8px}
 .imp{border:1.5px solid #E0D6CA;border-radius:12px;background:#FBF7F1;padding:8px}
 .imp input{width:100%;border:1.5px solid #E0D6CA;border-radius:9px;padding:10px;font-size:16px;background:var(--white);color:var(--brown);font-family:inherit;min-height:44px}
@@ -543,6 +544,8 @@ function card(j){
       ${chips(j)}
       ${j.asegurado||j.averia?`<div class="who"><span class="tag">${COMP[j.compania]||''}</span>${esc(j.asegurado||'')}</div>`:''}
       ${(()=>{const t=totales(j.importes,ivaDe(j));return t.base>0?`<div class="imp-card" data-act="edit">Importe: ${eur(t.total)} ${ivaCard(t.tipo)}</div>`:''})()}
+      ${(()=>{const m=totMats(j.materiales), pr=r2(+j.propina||0); /* v26 · Material y Propina aparte, solo si hay (no se suman al importe) */
+        return (m>0?`<div class="imp-extra" data-act="edit" data-x="material">Material: ${eur(m)}</div>`:'')+(pr>0?`<div class="imp-extra" data-act="edit" data-x="propina">Propina: ${eur(pr)}</div>`:'')})()}
     </div>
     <div class="grip" data-grip="1" role="button" aria-label="Arrastrar para ordenar">${ICON.grip}</div>
   </div>
@@ -952,7 +955,7 @@ function openMenu(){
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v25 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v26 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`,{key:'menu',reopen:openMenu});
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
