@@ -755,7 +755,7 @@ function openVisita(j){
   <div class="row2"><div class="f"><label>Día</label><input id="v_dia" type="date" value="${base?local(base):''}"></div>
   <div class="f"><label>Hora</label><input id="v_hora" type="time" step="300" value="${base?p(base.getHours())+':'+p(base.getMinutes()):''}"></div></div>
   <div class="quick" id="vQuick"><button type="button" data-d="${local(hoy)}">Hoy</button><button type="button" data-d="${local(man)}">Mañana</button>
-  ${['09:00','10:00','12:00','16:00','18:00'].map(h=>`<button type="button" data-h="${h}">${h}</button>`).join('')}</div>
+  ${['09:00','10:00','11:00','12:00','15:00','16:00','17:00','18:00'].map(h=>`<button type="button" data-h="${h}">${h}</button>`).join('')}</div>
   <div class="actions">
     ${base?'<button class="btn danger" id="vDel">Quitar</button>':'<button class="btn soft" id="vCancel">Cancelar</button>'}
     <button class="btn primary" id="vOk">Guardar</button>
@@ -955,7 +955,7 @@ function openMenu(){
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v26 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v27 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`,{key:'menu',reopen:openMenu});
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
