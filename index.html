@@ -231,8 +231,9 @@ const ICON={
  clock:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 13.5v3l2 1.2"/></svg>',
  trash:'<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
  arch:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>',
+ nuevo:'<svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6.2 6.2l2.1 2.1M15.7 15.7l2.1 2.1M17.8 6.2l-2.1 2.1M8.3 15.7l-2.1 2.1"/><circle cx="12" cy="12" r="3.2"/></svg>',
 };
-const TABS=[['notas','Delgame',ICON.notas],['iris','Iris',ICON.iris],['lucia','Lucía',ICON.lucia],['particular','Partic.',ICON.part],['pendiente','Pendiente',ICON.pend],['archivo','Archivo',ICON.arch]];
+const TABS=[['nuevos','Nuevos',ICON.nuevo],['notas','Delgame',ICON.notas],['iris','Iris',ICON.iris],['lucia','Lucía',ICON.lucia],['particular','Partic.',ICON.part],['archivo','Archivo',ICON.arch]];
 const CHECKS=[['cita','Cita'],['obra','Obra'],['fotos','Fotos'],['factura','Factura'],['cobro','Cobro']];
 const COMP={iris:'Iris',lucia:'Santa Lucía',particular:'Particular'};
 const MODS=['Asistencia','Bricoasistencia','Daños agua','DAE','Conexión'], PROVS=['Santa Lucía','SegurCaixa','Naturgy','Anovo'];
@@ -257,7 +258,7 @@ function chips(j){const m=String(j.modalidad||'').trim(), p=String(j.proveedor||
 
 /* Sin datos personales en el código: los partes llegan por sincronización, importación o seed.json (solo pruebas locales) */
 
-let jobs=load(), cfg=JSON.parse(localStorage.getItem(CFG)||'{}'), tab='notas', query='', editing=null, deferredPrompt=null;
+let jobs=load(), cfg=JSON.parse(localStorage.getItem(CFG)||'{}'), tab=jobs.some(j=>j&&j.nuevo&&!j.archivado)?'nuevos':'notas', query='', editing=null, deferredPrompt=null;
 
 function cleanPob(p){return String(p??'').replace(/\s*\([^)]*\)\s*$/,'').trim()} /* declaración (no const): load() la usa antes de esta línea */
 function load(){
@@ -498,8 +499,9 @@ function visible(){
   let l=jobs.filter(j=>{
     if(tab==='archivo') return j.archivado;
     if(j.archivado) return false;
+    if(tab==='nuevos') return !!j.nuevo;
+    if(j.nuevo) return false; /* v28 · los nuevos se ven solo en Nuevos, aparte */
     if(tab==='notas') return true;
-    if(tab==='pendiente') return !(j.checks||{}).cita;
     return j.compania===tab;
   });
   if(query){const q=query.toLowerCase();l=l.filter(j=>[j.numero,j.direccion,j.poblacion,telsOf(j).join(' '),telsOf(j).map(fmtTel).join(' '),j.telefono,j.asegurado,j.averia,j.notas,j.condiciones,j.modalidad,j.proveedor,j.disponibilidad,...(j.materiales||[]).map(m=>m.desc),...(j.importes||[]).map(l=>l.codigo+' '+l.desc)].join(' ').toLowerCase().includes(q)||(q.replace(/\s/g,'').length>=3&&telsOf(j).some(t=>t.includes(q.replace(/\s/g,'')))))}
@@ -510,8 +512,15 @@ function render(){
   if(drag||press||dispTyping()){ clearTimeout(render.t); render.t=setTimeout(render,400); return } /* no rehacer la lista bajo el dedo ni mientras escribes (v24: no se cierra el teclado) */
   $('#title').textContent=TABS.find(t=>t[0]===tab)[1].replace('Partic.','Particulares');
   const l=visible();
-  $('#list').innerHTML=l.length?l.map(card).join(''):`<div class="empty">${query?'Nada encontrado para “'+esc(query)+'”':tab==='archivo'?'No hay partes archivados':'No hay partes aquí.<br>Pulsa + para añadir uno.'}</div>`;
-  const cnt=k=>jobs.filter(j=>k==='archivo'?j.archivado:!j.archivado&&(k==='notas'||(k==='pendiente'?!(j.checks||{}).cita:j.compania===k))).length;
+  $('#list').innerHTML=l.length?l.map(card).join(''):`<div class="empty">${query?'Nada encontrado para “'+esc(query)+'”':tab==='archivo'?'No hay partes archivados':tab==='nuevos'?'No hay siniestros nuevos.':'No hay partes aquí.<br>Pulsa + para añadir uno.'}</div>`;
+  const cnt=k=>jobs.filter(j=>{
+    if(k==='archivo') return j.archivado;
+    if(j.archivado) return false;
+    if(k==='nuevos') return !!j.nuevo;
+    if(j.nuevo) return false;
+    if(k==='notas') return true;
+    return j.compania===k;
+  }).length;
   $('#tabs').innerHTML=TABS.map(([k,n,ic])=>{const c=cnt(k);return `<button data-tab="${k}" class="${k===tab?'on':''}"><span class="ic">${ic}</span>${n}${c?`<span class="badge">${c}</span>`:''}</button>`}).join('');
   renderSync();
 }
@@ -554,6 +563,7 @@ function card(j){
   </div>
   <label class="disp" data-disp-box="1"><span class="dl">Disponibilidad cliente</span><input type="text" data-disp="1" enterkeyhint="done" autocomplete="off" autocapitalize="sentences" maxlength="200" value="${esc(j.disponibilidad||'')}" placeholder="Ej.: tardes a partir de las 17 h"></label>
   ${(()=>{const v=fmtVisita(j.visita);return `<button class="visita${v?' set':''}${v&&v.hoy?' hoy':''}${v&&v.pasada?' pasada':''}" data-act="visita">${ICON.clock}<span><span class="vl">Hora de visita</span><span class="vv">${v?esc(v.txt):'Poner hora de visita'}</span></span></button>`})()}
+  ${tab==='nuevos'&&j.nuevo?`<button type="button" class="btn soft" data-act="visto" style="width:100%;margin-top:8px">Pasar a Delgame</button>`:''}
   <div class="checks">${CHECKS.map(([k,n])=>`<label><input type="checkbox" data-check="${k}" ${ch[k]?'checked':''}>${n}</label>`).join('')}</div>
 </article>`;
 }
@@ -566,6 +576,7 @@ $('#list').addEventListener('click',e=>{
   if(act==='edit') openEdit(j);
   if(act==='up'||act==='down') move(j,act);
   if(act==='visita') openVisita(j);
+  if(act==='visto') markVisto(j,true);
   if(act==='wa') openWA(e.target.closest('[data-tels]').dataset.tels.split(','));
 });
 /* v24 · Disponibilidad cliente: se escribe en la lista y se guarda sola (0,6 s), y al salir del campo o de la app */
@@ -585,7 +596,7 @@ $('#list').addEventListener('change',e=>{
   if(e.target.dataset&&e.target.dataset.disp){ e.stopPropagation(); return }
   const k=e.target.dataset.check; if(!k) return; const j=jobs.find(x=>x.id===e.target.closest('.card').dataset.id);
   j.checks={...(j.checks||{}),[k]:e.target.checked}; j.mod=Date.now(); save();
-  if(k==='cita'&&tab==='pendiente'&&e.target.checked){toast('Cita marcada ✓');setTimeout(render,350)} else render();
+  render();
 });
 /* v16 · reordenar: asa ≡ (arrastra al instante) o pulsación larga de 400 ms en la tarjeta (tolerancia 10 px).
    Antes (v13–v15) se usaba setPointerCapture: en Chrome Android el toque ya está capturado de forma implícita por el
@@ -770,12 +781,22 @@ function openVisita(j){
     setVisita(j,dt.toISOString());
   };
 }
+function markVisto(j,aviso){
+  const live=j&&(jobs.find(x=>x.id===j.id)||j);
+  if(!live||!live.nuevo) return false;
+  delete live.nuevo;
+  if(j&&j!==live) delete j.nuevo;
+  if(save()){ if(aviso){ render(); toast('Pasado a Delgame') } return true }
+  return false;
+}
 function setVisita(j,iso){
   j.visita=iso; if(iso) j.checks={...(j.checks||{}),cita:true};
+  if(iso) delete j.nuevo; /* v28 · al poner hora deja de ser nuevo */
   j.mod=Date.now(); if(save()){closeSheet();render();toast(iso?'Visita: '+fmtVisita(iso).txt:'Hora de visita quitada')}
 }
 function openEdit(j){
   dispFlush(); if(j) j=jobs.find(x=>x.id===j.id)||j;
+  if(j&&j.nuevo) markVisto(j,false); /* v28 · al abrir el parte sale de Nuevos */
   const isNew=!j;
   editing=j?JSON.parse(JSON.stringify(j)):{id:'p-'+Date.now().toString(36),numero:'',compania:tab==='iris'||tab==='lucia'?tab:'particular',direccion:'',poblacion:'',telefono:'',asegurado:'',averia:'',condiciones:'',notas:'',fotos:[],fecha:new Date().toISOString(),checks:{},visita:'',importes:[],ivaTipo:21,materiales:[],propina:'',disponibilidad:'',modalidad:'',proveedor:tab==='iris'||tab==='lucia'?'Santa Lucía':'',archivado:false};
   editing._new=isNew;
@@ -955,7 +976,7 @@ function openMenu(){
   <button class="btn soft" id="mCod">🏷️&nbsp; Códigos y precios (${Object.keys(cat).length})</button></div>
   <div class="f" style="margin-top:14px"><label>Dirección de sincronización (opcional)</label><input id="mUrl" type="url" placeholder="https://…" value="${esc(cfg.url||'')}"></div>
   <p class="hint">Si está configurada, la app lee aquí los siniestros nuevos del correo cada vez que la abres y los añade solos. Lo que tú hayas cambiado en un parte no se sobrescribe.</p>
-  <p class="hint">Cuaderno v27 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
+  <p class="hint">Cuaderno v28 · ${jobs.length} partes guardados en este móvil · ${Math.round((localStorage.getItem(KEY)||'').length/1024)} KB</p>
   <div class="actions"><button class="btn primary" id="mOk">Cerrar</button></div>`,{key:'menu',reopen:openMenu});
   $('#mCod').onclick=openCodigos; $('#mDead').onclick=openBorrados; $('#mBk').onclick=openCopias;
   $('#mExp').onclick=exportJSON; $('#mImp').onclick=()=>$('#fileImport').click();
@@ -1046,8 +1067,8 @@ function merge(list,overwrite){
     if(isDead(r)){skipped++;continue}
     const j=normalize(r);
     const ex=jobs.find(x=>(j.numero&&x.numero===j.numero)||x.id===j.id);
-    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; if(!(Array.isArray(r.materiales)&&r.materiales.length)&&!j.materiales.length&&(ex.materiales||[]).length) j.materiales=ex.materiales; if((r.propina===''||r.propina==null)&&ex.propina!=null&&ex.propina!=='') j.propina=ex.propina; if(!String(r.disponibilidad??'').trim()&&ex.disponibilidad) j.disponibilidad=ex.disponibilidad; if(j.ivaTipo==null){ if(ex.ivaTipo!=null) j.ivaTipo=ex.ivaTipo; else delete j.ivaTipo } Object.assign(ex,j,{orden:ex.orden});updated++} else if(!overwrite){ for(const k of ['asegurado','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; { const a=telsOf(ex), u=uniqTels([...a,...telsOf(j)]).slice(0,MAXTEL); if(u.length>a.length) setTels(ex,u,ex.telefono); else if(!ex.telefono&&j.telefono) ex.telefono=j.telefono; } if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; if(!(ex.materiales||[]).length&&j.materiales.length) ex.materiales=j.materiales; if((ex.propina==null||ex.propina==='')&&j.propina!=='') ex.propina=j.propina; if(!ex.disponibilidad&&j.disponibilidad) ex.disponibilidad=j.disponibilidad; if(ex.ivaTipo==null&&j.ivaTipo!=null) ex.ivaTipo=j.ivaTipo; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
-    else { if(j.ivaTipo==null) delete j.ivaTipo; j.orden=++top; jobs.push(j); added++; }
+    if(ex){ if(overwrite&&(j.mod||0)>=(ex.mod||0)){ if(!Array.isArray(r.importes)) j.importes=ex.importes||[]; if(!j.visita&&!('visita' in r)) j.visita=ex.visita||''; for(const k of ['modalidad','proveedor']) if(!(k in r)&&ex[k]!=null) j[k]=ex[k]; if(!(Array.isArray(r.materiales)&&r.materiales.length)&&!j.materiales.length&&(ex.materiales||[]).length) j.materiales=ex.materiales; if((r.propina===''||r.propina==null)&&ex.propina!=null&&ex.propina!=='') j.propina=ex.propina; if(!String(r.disponibilidad??'').trim()&&ex.disponibilidad) j.disponibilidad=ex.disponibilidad; if(j.ivaTipo==null){ if(ex.ivaTipo!=null) j.ivaTipo=ex.ivaTipo; else delete j.ivaTipo } Object.assign(ex,j,{orden:ex.orden,nuevo:overwrite?(r.nuevo?true:ex.nuevo):ex.nuevo}); if(!ex.nuevo) delete ex.nuevo; updated++} else if(!overwrite){ for(const k of ['asegurado','direccion','poblacion','averia','condiciones','visita']) if(!ex[k]&&j[k]) ex[k]=j[k]; { const a=telsOf(ex), u=uniqTels([...a,...telsOf(j)]).slice(0,MAXTEL); if(u.length>a.length) setTels(ex,u,ex.telefono); else if(!ex.telefono&&j.telefono) ex.telefono=j.telefono; } if(!(ex.importes||[]).length&&j.importes.length) ex.importes=j.importes; if(!ex.modalidad&&j.modalidad) ex.modalidad=j.modalidad; if(!(ex.materiales||[]).length&&j.materiales.length) ex.materiales=j.materiales; if((ex.propina==null||ex.propina==='')&&j.propina!=='') ex.propina=j.propina; if(!ex.disponibilidad&&j.disponibilidad) ex.disponibilidad=j.disponibilidad; if(ex.ivaTipo==null&&j.ivaTipo!=null) ex.ivaTipo=j.ivaTipo; const rp=r.proveedor??r.provider; if(!ex.proveedor&&rp) ex.proveedor=canon(rp,PROVS); } }
+    else { if(j.ivaTipo==null) delete j.ivaTipo; if(!overwrite) j.nuevo=true; else if(r.nuevo) j.nuevo=true; else delete j.nuevo; j.orden=++top; jobs.push(j); added++; }
   }
   return {added,updated,skipped};
 }
